@@ -1,0 +1,324 @@
+#version 450
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+const int HIT_MISS = 0;
+const int HIT_SUCCESS = 1;
+const float FOV = 1.0 * 1.57079632679; // 90 degrees, pi/2
+
+// structs used
+struct Camera {
+    vec3 position;
+    float padA;
+    vec3 forward;
+    float padB;
+    vec3 right;
+    float padC;
+    vec3 up;
+    float padD;
+
+    float yaw;
+    float pitch;
+    float lastX;
+    float lastY;
+};
+
+struct Material {
+    vec3 color;
+    float reflectivity;
+    vec3 emissionColor;
+    float emissionStrength;
+};
+
+struct Sphere {
+    vec3 position;
+    float radius;
+    Material mat;
+};
+
+struct Triangle {
+    vec3 v0;
+    float padA;
+    vec3 v1;
+    float padB;
+    vec3 v2;
+    float padC;
+    Material mat;
+};
+
+// internal struct used by compute shader, do not need to std430 align (nor std140 align)
+struct Ray {
+    vec3 origin;
+    vec3 dir;
+};
+
+struct Hit {
+    int didHit;
+    float t;
+    vec3 position;
+    vec3 normal;
+    Material mat;
+};
+
+// layout bindings
+layout(binding = 0) uniform UniformBufferObject {
+    int width;
+    int height;
+    int sphereCount;
+    int triangleCount;
+    Camera camera;
+    int NUM_SAMPLES;
+    int MAX_DEPTH;
+    int frameCount;
+};
+layout (binding = 1, rgba32f) uniform image2D pixels;
+layout (std430, binding = 2) buffer SphereBuffer {
+    Sphere spheres[];
+};
+layout (std430, binding = 3) buffer TriangleBuffer {
+    Triangle triangles[];
+};
+
+uint state = uint(frameCount * 100);
+
+// --- PCG Hash Algorithm ---
+// Takes a 32-bit unsigned int state and returns a 32-bit pseudo-random unsigned int.
+uint pcg() {
+    uint state_old = state;
+    // LCG step
+    state = state_old * 747796405u + 2891336453u;
+    // Xor shift step
+    uint word = ((state_old >> ((state_old >> 28u) + 4u)) ^ state_old) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+// --- Float Conversion ---
+// Returns a pseudo-random float in the range [0.0, 1.0)
+float randf() {
+    // Convert 32-bit int to a float between 0.0 and 1.0
+    return float(pcg()) / 4294967296.0;
+}
+
+Ray makeRayFromCameraThroughPixel() {
+    int x = int(gl_GlobalInvocationID.x);
+    int y = int(gl_GlobalInvocationID.y);
+    float px = x + randf(); // camera jittering for multiple samples per pixel
+    float py = y + randf(); // why not lmao. idk how to make this more random
+
+    float u = ((px) / float(width)) * 2 - 1;
+    float v = ((py) / float(height)) * 2 - 1;
+
+    float planeHalfHeight = tan(0.5f * FOV);
+    float planeHalfWidth = planeHalfHeight * width / float(height);
+
+    vec3 viewPlaneCenter = camera.position + camera.forward;
+    vec3 pixelPoint = viewPlaneCenter + u * planeHalfWidth * camera.right;
+    // NOTE: this means y=0 is top of screen!!!
+    pixelPoint = pixelPoint - v * planeHalfHeight * camera.up;
+
+    return Ray(
+        camera.position,
+        normalize(pixelPoint - camera.position)
+    );
+}
+
+Hit createEmptyHit() {
+    return Hit(
+        0,
+        -1,
+        vec3(0),
+        vec3(0),
+        Material(
+            vec3(0),
+            0,
+            vec3(0),
+            0
+        )
+    );
+}
+
+Hit intersectSphere(Ray ray, Sphere sphere) {
+    vec3 oc = ray.origin - sphere.position;
+    float a = dot(ray.dir, ray.dir); // should be 1 if normalized
+    float b = 2 * dot(oc, ray.dir);
+    float c = dot(oc, oc) - sphere.radius * sphere.radius;
+
+    float discriminant = b * b - 4 * a * c;
+
+    Hit noHit = createEmptyHit();
+    noHit.didHit = HIT_MISS;
+
+    if (discriminant < 0) return noHit;
+
+    float sqrtDisc = float(sqrt(discriminant));
+    float t1 = (-b - sqrtDisc) / (2 * a);
+    float t2 = (-b + sqrtDisc) / (2 * a);
+
+    float t;
+
+    if (t1 > 1e-6) t = t1;
+    else if (t2 > 1e-6) t = t2;
+    else return noHit;
+
+    vec3 hitPoint = ray.origin + t * ray.dir;
+    vec3 normal = normalize(hitPoint - sphere.position);
+
+    return Hit(HIT_SUCCESS, t, hitPoint, normal, sphere.mat);
+}
+
+Hit intersectTriangle(Ray ray, Triangle triangle) {
+    vec3 v0 = triangle.v0;
+    vec3 v1 = triangle.v1;
+    vec3 v2 = triangle.v2;
+
+    vec3 edge1 = v1 - v0;
+    vec3 edge2 = v2 - v0;
+
+    vec3 h = cross(ray.dir, edge2);
+    float a = dot(edge1, h);
+
+    Hit noHit = createEmptyHit();
+    noHit.didHit = HIT_MISS;
+
+    if (-1e-6 < a && a < 1e-6) return noHit;
+
+    float f = 1.0f / a;
+    vec3 s = ray.origin - v0;
+    float u = f * dot(s, h);
+
+    if (u < 0 || u > 1) {
+        return noHit; // outside triangle
+    }
+
+    vec3 q = cross(s, edge1);
+    float v = f * dot(ray.dir, q);
+
+    if (v < 0 || (u + v) > 1) {
+        return noHit;
+    }
+
+    float t = f * dot(edge2, q);
+
+    if (t > 1e-6) { // intersection in front of ray
+        vec3 hitPoint = ray.origin + t * ray.dir;
+        vec3 normal = normalize(cross(edge1, edge2));
+        if (dot(normal, ray.dir) > 0) {
+            normal *= -1; // flip normal if facing wrong direction
+        }
+        return Hit(HIT_SUCCESS, t, hitPoint, normal, triangle.mat);
+    }
+    else {
+        return noHit;
+    }
+}
+
+Hit findClosestIntersection(Ray ray) {
+    Hit closestHit = createEmptyHit();
+    int first = 1;
+    
+    // for now, all objects are spheres. in the future will add a triangle
+    for (int i = 0; i < sphereCount; i++) {
+        Hit hit = intersectSphere(ray, spheres[i]);
+        if (hit.didHit == HIT_MISS) continue;
+        if (first == 1) {
+            first = 0;
+            closestHit = hit;
+        }
+        else if (hit.t < closestHit.t) {
+            closestHit = hit;
+        }
+    }
+
+    // repeat for triangle using intersectTriangle
+    for (int i = 0; i < triangleCount; i++) {
+        Hit hit = intersectTriangle(ray, triangles[i]);
+        if (hit.didHit == HIT_MISS) continue;
+        if (first == 1) {
+            first = 0;
+            closestHit = hit;
+        }
+        else if (hit.t < closestHit.t) {
+            closestHit = hit;
+        }
+    }
+
+    return closestHit;
+}
+
+vec3 randomUnitVec3() {
+    float theta = randf() * 6.28318530718; // 2 * pi
+    float u = randf() * 2.0 - 1.0;
+    float a = sqrt(1.0 - u * u);
+    return vec3(a * cos(theta), a * sin(theta), u);
+}
+
+vec3 randomCosineWeightedDir(vec3 normal) {
+    // Cosine-weighted hemisphere sample (local space)
+    float r1 = randf();
+    float r2 = randf();
+
+    float phi = 6.28318530718 * r1; // 2 * PI
+    float x = cos(phi) * sqrt(r2);
+    float y = sin(phi) * sqrt(r2);
+    float z = sqrt(1.0 - r2);
+
+    // Build an orthonormal basis from the normal
+    vec3 tangent;
+    if (abs(normal.z) < 0.999)
+        tangent = normalize(cross(vec3(0.0, 0.0, 1.0), normal));
+    else
+        tangent = normalize(cross(vec3(0.0, 1.0, 0.0), normal));
+
+    vec3 bitangent = cross(normal, tangent);
+
+    // Transform from tangent space to world space
+    vec3 diffuseDir = normalize(
+        tangent * x +
+        bitangent * y +
+        normal * z
+    );
+
+    return diffuseDir;
+}
+
+vec3 traceRay(Ray ray) {
+    vec3 incomingLight = vec3(0);
+    vec3 rayColor = vec3(1);
+
+    for (int i = 0; i < MAX_DEPTH; i++) {
+        Hit hit = findClosestIntersection(ray);
+        vec3 point = hit.position;
+        vec3 normal = hit.normal;
+        Material mat = hit.mat;
+        if (hit.didHit == HIT_SUCCESS) {
+            ray.origin = hit.position + 1e-4f * normal;
+            vec3 diffuseDir = randomCosineWeightedDir(normal); // random hemisphere cosine weighted direction
+            vec3 specularDir = reflect(ray.dir, normal);
+            ray.dir = mix(diffuseDir, specularDir, mat.reflectivity);
+
+            vec3 emittedLight = mat.emissionStrength * mat.emissionColor; // this object will emit light back into the camera
+            incomingLight += emittedLight * rayColor; // tint the color via the ray color so far
+            rayColor *= mat.color; // ray color absorbs some of the material's color
+        }
+        else {
+            vec3 skyColor = vec3(0.5, 0.7, 1.0);
+            incomingLight += skyColor * rayColor;
+            break; // ray did not hit anything (hit the sky) can safely exit
+        }
+    }
+
+    return incomingLight;
+}
+
+void main() {
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+    if (coord.x >= width || coord.y >= height) return;
+    vec3 color = imageLoad(pixels, coord).xyz;
+    state = uint(uint(coord.x) * 1973u + uint(coord.y) * 9277u + uint(frameCount) * 26699u) | uint(1);
+
+    for (int i = 0; i < NUM_SAMPLES; i++) {
+        Ray ray = makeRayFromCameraThroughPixel();
+        color += traceRay(ray);
+    }
+    imageStore(pixels, coord, vec4(color, 1)); // compute shader just accumulates
+}
