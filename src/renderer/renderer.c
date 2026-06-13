@@ -11,7 +11,7 @@ static void initWindow(vk_context *vko) {
     const GLFWvidmode *mode = glfwGetVideoMode(monitor);
     vko->width = mode->width;
     vko->height = mode->height;
-    vko->window = glfwCreateWindow(vko->width, vko->height, "Ray Tracing", NULL, NULL);
+    vko->window = glfwCreateWindow(vko->width, vko->height, "Ray Tracing", monitor, NULL);
     if (!vko->window) {
         printf("Failed to create GLFW window\n");
         exit(1);
@@ -425,6 +425,7 @@ static void initVulkan(vk_context *vko) {
     createSampler(vko, &vko->storageSampler);
     initializeBufferGPU(vko, vko->spheres, &vko->sphereBuffer, &vko->sphereMemory, vko->sphereCount * sizeof(Sphere));
     initializeBufferGPU(vko, vko->triangles, &vko->triangleBuffer, &vko->triangleMemory, vko->triangleCount * sizeof(Triangle));
+    initializeBufferGPU(vko, vko->homogenousVolumes, &vko->homogenousVolumesBuffer, &vko->homogenousVolumesMemory, vko->homogenousVolumesCount * sizeof(HomogenousVolume));
     createDescriptorSetLayout(vko);
     createDescriptorPool(vko);
     createDescriptorSets(vko);
@@ -454,6 +455,8 @@ void cleanupRenderer(vk_context *vko) {
     vkFreeMemory(vko->device, vko->sphereMemory, NULL);
     vkDestroyBuffer(vko->device, vko->triangleBuffer, NULL);
     vkFreeMemory(vko->device, vko->triangleMemory, NULL);
+    vkDestroyBuffer(vko->device, vko->homogenousVolumesBuffer, NULL);
+    vkFreeMemory(vko->device, vko->homogenousVolumesMemory, NULL);
     vkFreeMemory(vko->device, vko->screenQuadBufferMemory, NULL);
     vkDestroySampler(vko->device, vko->storageSampler, NULL);
     vkDestroyImageView(vko->device, vko->storageImageView, NULL);

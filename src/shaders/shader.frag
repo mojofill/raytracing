@@ -26,6 +26,7 @@ layout(binding = 0) uniform UniformBufferObject {
     int NUM_SAMPLES;
     int MAX_DEPTH;
     int frameCount;
+    int homogenousVolumesCount;
 };
 layout(binding = 1, rgba32f) uniform readonly image2D outputImage;
 
@@ -34,9 +35,11 @@ void main() {
     ivec2 imgSize = imageSize(outputImage);
     ivec2 texCoord = ivec2(uv * vec2(imgSize));
 
-    // gamma correction
     vec3 color = imageLoad(outputImage, texCoord).rgb / float(NUM_SAMPLES * frameCount);
+    
+    // gamma correction
     color = pow(color, vec3(1.0 / 2.2));
+
+    // final color
     outColor = vec4(color, 1.0);
-    if (texCoord.y == 0) outColor = vec4(0);
 }

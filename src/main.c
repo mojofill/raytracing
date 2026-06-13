@@ -1,24 +1,46 @@
 #include "renderer/renderer.h"
-#include "objects/sphere.h"
-#include "objects/triangle.h"
+#include "objects/objects.h"
 #include "camera/camera.h"
 #include "cglm/cglm.h"
 
 #define NUM_SAMPLES 1
 #define MAX_DEPTH 20
+#define ASYMMETRY_PARAMETER 0.98 // Henyey-Greenstein asymmetry parameter. Range: [-1, 1]
 #define MAX_FRAMES_RAN 100
-#define STOP 0
+#define STOP 1
+
+#define RENDER_SPHERES
+#define RENDER_TRIANGLES
+#define RENDER_HOMOGENOUS_VOLUMES
 
 void updateUniforms(vk_context *vko, uint32_t currentFrame) {
     UniformBufferObject ubo = {0};
     ubo.width = vko->width;
     ubo.height = vko->height;
-    ubo.sphereCount = vko->sphereCount;
-    ubo.triangleCount = vko->triangleCount;
+    
+    #ifdef RENDER_SPHERES
+        ubo.sphereCount = vko->sphereCount;
+    #else
+        ubo.sphereCount = 0;
+    #endif
+    
+    #ifdef RENDER_TRIANGLES
+        ubo.triangleCount = vko->triangleCount;
+    #else
+        ubo.triangleCount = 0;
+    #endif
+
+    #ifdef RENDER_HOMOGENOUS_VOLUMES
+        ubo.homogenousVolumesCount = vko->homogenousVolumesCount;
+    #else
+        ubo.homogenousVolumesCount = 0;
+    #endif
+
     ubo.cam = vko->cam;
     ubo.numSamples = NUM_SAMPLES;
     ubo.maxDepth = MAX_DEPTH;
     ubo.frameCount = vko->frameCount;
+    ubo.g = ASYMMETRY_PARAMETER;
     memcpy(vko->uniformBuffersMapped[currentFrame], &ubo, sizeof(UniformBufferObject));
 }
 
@@ -74,8 +96,6 @@ void updateCamera(vk_context *vko) {
     camera->yaw += xoffset;
     camera->pitch += yoffset;
 
-    // printf("yaw = %f, pitch = %f, xoffset = %f, yoffset = %f\n", camera->yaw, camera->pitch, xoffset, yoffset);
-
     // Clamp pitch
     float limit = GLM_PI_2 - 0.001f;
     camera->pitch = glm_clamp(camera->pitch, -limit, limit);
@@ -96,39 +116,50 @@ void updateCamera(vk_context *vko) {
     glm_vec3_cross(camera->right, camera->forward, camera->up);
     glm_normalize(camera->up);
 
+    vec3 flatForward;
+    flatForward[0] = camera->forward[0];
+    flatForward[1] = camera->forward[1];
+    flatForward[2] = 0;
+
+    glm_normalize(flatForward);
+
+    vec3 flatRight;
+    glm_cross(flatForward, (vec3) {0, 0, 1}, flatRight);
+    glm_normalize(flatRight);
+
     if (glfwGetKey(vko->window, GLFW_KEY_W) == GLFW_PRESS) {
         vec3 scaledForward;
-        glm_vec3_scale(camera->forward, speed, scaledForward);
+        glm_vec3_scale(flatForward, speed, scaledForward);
         glm_vec3_add(camera->position, scaledForward, camera->position);
         didMove = 1;
     }
     if (glfwGetKey(vko->window, GLFW_KEY_S) == GLFW_PRESS) {
         vec3 scaledForward;
-        glm_vec3_scale(camera->forward, speed, scaledForward);
+        glm_vec3_scale(flatForward, speed, scaledForward);
         glm_vec3_sub(camera->position, scaledForward, camera->position);
         didMove = 1;
     }
     if (glfwGetKey(vko->window, GLFW_KEY_A) == GLFW_PRESS) {
         vec3 scaledRight;
-        glm_vec3_scale(camera->right, speed, scaledRight);
+        glm_vec3_scale(flatRight, speed, scaledRight);
         glm_vec3_sub(camera->position, scaledRight, camera->position);
         didMove = 1;
     }
     if (glfwGetKey(vko->window, GLFW_KEY_D) == GLFW_PRESS) {
         vec3 scaledRight;
-        glm_vec3_scale(camera->right, speed, scaledRight);
+        glm_vec3_scale(flatRight, speed, scaledRight);
         glm_vec3_add(camera->position, scaledRight, camera->position);
         didMove = 1;
     }
     if (glfwGetKey(vko->window, GLFW_KEY_SPACE) == GLFW_PRESS) {
         vec3 scaledUp;
-        glm_vec3_scale(camera->up, speed, scaledUp);
+        glm_vec3_scale((vec3) {0, 0, 1}, speed, scaledUp);
         glm_vec3_add(camera->position, scaledUp, camera->position);
         didMove = 1;
     }
     if (glfwGetKey(vko->window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
         vec3 scaledUp;
-        glm_vec3_scale(camera->up, speed, scaledUp);
+        glm_vec3_scale((vec3) {0, 0, 1}, speed, scaledUp);
         glm_vec3_sub(camera->position, scaledUp, camera->position);
         didMove = 1;
     }
@@ -162,13 +193,14 @@ void mainLoop(vk_context *vko) {
             initializeCamera(vko);
             updateCamera(vko);
         }
+        
+        updateCamera(vko);
         if (STOP && vko->frameCount >= MAX_FRAMES_RAN) {
             continue;
         }
         vko->frameCount++;
         updateUniforms(vko, currentFrame);
         drawFrame(vko, &currentFrame);
-        updateCamera(vko);
     }
 }
 
@@ -402,27 +434,27 @@ void initializeTrianglesCPU(vk_context *vko) {
 
     // triangle 1 for floor
     vko->triangles[vko->triangleCount++] = (Triangle) {
-        .v0 = {-100, 100, 0},
-        .v1 = {100, -100, 0},
-        .v2 = {-100, -100, 0},
+        .v0 = {-5.5, 5.5, 0},
+        .v1 = {5.5, -5.5, 0},
+        .v2 = {-5.5, -5.5, 0},
         .mat = (Material) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 1, 1},
             .emissionStrength = 0,
-            .reflectivity = 0
+            .reflectivity = 1.00
         }
     };
 
     // triangle 2 for floor
     vko->triangles[vko->triangleCount++] = (Triangle) {
-        .v0 = {-100, 100, 0},
-        .v1 = {100, 100, 0},
-        .v2 = {100, -100, 0},
+        .v0 = {-5.5, 5.5, 0},
+        .v1 = {5.5, 5.5, 0},
+        .v2 = {5.5, -5.5, 0},
         .mat = (Material) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 1, 1},
             .emissionStrength = 0,
-            .reflectivity = 0
+            .reflectivity = 1.00
         }
     };
 
@@ -479,6 +511,19 @@ void initializeTrianglesCPU(vk_context *vko) {
     };
 }
 
+void initializeHomogenousVolumesCPU(vk_context *vko) {
+    float absorptionCoefficient = 0.50;
+    float scatteringCoefficient = 0.50;
+    float extinctionCoefficient = absorptionCoefficient + scatteringCoefficient;
+    vko->homogenousVolumes[vko->homogenousVolumesCount++] = (HomogenousVolume) {
+        .absorptionCoefficient = absorptionCoefficient,
+        .scatteringCoefficient = scatteringCoefficient,
+        .extinctionCoefficient = extinctionCoefficient,
+        .minXYZ = {-3, -3, 0.01}, // bounding box
+        .maxXYZ = {3, 3, 1}
+    };
+}
+
 int main() {
     vk_context vko = {0};
     
@@ -490,6 +535,7 @@ int main() {
     // must do this first
     initializeSpheresCPU(&vko);
     initializeTrianglesCPU(&vko);
+    initializeHomogenousVolumesCPU(&vko);
     initRenderer(&vko);
     initializeScreenQuadBuffer(&vko);
     initializeCamera(&vko);

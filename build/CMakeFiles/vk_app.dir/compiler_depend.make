@@ -185,8 +185,10 @@ CMakeFiles/vk_app.dir/src/main.c.o: /Users/henryzhang/Documents/vulkan-projects/
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4-ext.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/material/material.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/objects.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/sphere.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/triangle.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/volume.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/buffer.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/commands.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/compute_pipeline.h \
@@ -389,8 +391,10 @@ CMakeFiles/vk_app.dir/src/renderer/buffer.c.o: /Users/henryzhang/Documents/vulka
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4-ext.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/material/material.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/objects.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/sphere.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/triangle.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/volume.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/buffer.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/vk_types.h \
   /usr/local/include/GLFW/glfw3.h \
@@ -588,8 +592,10 @@ CMakeFiles/vk_app.dir/src/renderer/commands.c.o: /Users/henryzhang/Documents/vul
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4-ext.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/material/material.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/objects.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/sphere.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/triangle.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/volume.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/commands.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/compute_pipeline.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/graphics_pipeline.h \
@@ -790,8 +796,10 @@ CMakeFiles/vk_app.dir/src/renderer/compute_pipeline.c.o: /Users/henryzhang/Docum
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4-ext.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/material/material.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/objects.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/sphere.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/triangle.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/volume.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/compute_pipeline.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/graphics_pipeline.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/swapchain.h \
@@ -989,8 +997,10 @@ CMakeFiles/vk_app.dir/src/renderer/descriptors.c.o: /Users/henryzhang/Documents/
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4-ext.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/material/material.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/objects.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/sphere.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/triangle.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/volume.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/buffer.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/descriptors.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/vk_types.h \
@@ -1189,8 +1199,10 @@ CMakeFiles/vk_app.dir/src/renderer/graphics_pipeline.c.o: /Users/henryzhang/Docu
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4-ext.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/material/material.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/objects.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/sphere.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/triangle.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/volume.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/graphics_pipeline.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/swapchain.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/vk_types.h \
@@ -1387,8 +1399,10 @@ CMakeFiles/vk_app.dir/src/renderer/image.c.o: /Users/henryzhang/Documents/vulkan
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4-ext.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/material/material.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/objects.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/sphere.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/triangle.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/volume.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/buffer.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/image.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/vk_types.h \
@@ -1594,8 +1608,10 @@ CMakeFiles/vk_app.dir/src/renderer/renderer.c.o: /Users/henryzhang/Documents/vul
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4-ext.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/material/material.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/objects.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/sphere.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/triangle.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/volume.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/buffer.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/commands.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/compute_pipeline.h \
@@ -1798,8 +1814,10 @@ CMakeFiles/vk_app.dir/src/renderer/swapchain.c.o: /Users/henryzhang/Documents/vu
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4-ext.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec4.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/material/material.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/objects.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/sphere.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/triangle.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/volume.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/swapchain.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/vk_types.h \
   /usr/local/include/GLFW/glfw3.h \
@@ -1842,6 +1860,8 @@ CMakeFiles/vk_app.dir/src/renderer/swapchain.c.o: /Users/henryzhang/Documents/vu
 /usr/local/include/vk_video/vulkan_video_codec_vp9std_decode.h:
 
 /usr/local/include/vk_video/vulkan_video_codec_h265std_encode.h:
+
+/usr/local/include/vk_video/vulkan_video_codec_h265std_decode.h:
 
 /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/simd/intrin.h:
 
@@ -2155,11 +2175,13 @@ CMakeFiles/vk_app.dir/src/renderer/swapchain.c.o: /Users/henryzhang/Documents/vu
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_types/_sigset_t.h:
 
-/usr/local/include/vk_video/vulkan_video_codec_h265std_decode.h:
-
 /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/mat4x2.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_types/_uint16_t.h:
+
+/Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec2.h:
+
+/Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/volume.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/i386/endian.h:
 
@@ -2180,6 +2202,8 @@ CMakeFiles/vk_app.dir/src/renderer/swapchain.c.o: /Users/henryzhang/Documents/vu
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_types/_intmax_t.h:
 
 /usr/local/include/vk_video/vulkan_video_codec_h264std_encode.h:
+
+/Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/objects.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/secure/_string.h:
 
@@ -2212,8 +2236,6 @@ CMakeFiles/vk_app.dir/src/renderer/swapchain.c.o: /Users/henryzhang/Documents/vu
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/i386/_endian.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_types/_errno_t.h:
-
-/Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/vec2.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_types/_seek_set.h:
 

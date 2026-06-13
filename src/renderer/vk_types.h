@@ -8,8 +8,7 @@
 #define GLFW_INCLUDE_NONE
 // for protection against vulkan
 #include <GLFW/glfw3.h>
-#include "objects/sphere.h"
-#include "objects/triangle.h"
+#include "objects/objects.h"
 #include "camera/camera.h"
 
 #define MAX_FRAMES_IN_FLIGHT 2
@@ -29,6 +28,8 @@ typedef struct UniformBufferObject {
     int numSamples; // per frame!
     int maxDepth;
     int frameCount; // for fragment shader
+    int homogenousVolumesCount; // adding here for maximum safety of std430 padding
+    float g; // Henyey-Greenstein asymmetry parameter. Range: [-1, 1]
 } UniformBufferObject;
 
 typedef struct vk_context {
@@ -94,11 +95,15 @@ typedef struct vk_context {
     VkDeviceMemory sphereMemory;
     VkBuffer triangleBuffer;
     VkDeviceMemory triangleMemory;
+    VkBuffer homogenousVolumesBuffer;
+    VkDeviceMemory homogenousVolumesMemory;
 
     Sphere spheres[500];
     int sphereCount;
     Triangle triangles[500];
     int triangleCount;
+    HomogenousVolume homogenousVolumes[500];
+    int homogenousVolumesCount;
     Camera cam;
 
     // Dynamic pipeline bindings

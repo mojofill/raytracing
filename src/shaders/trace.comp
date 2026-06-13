@@ -46,6 +46,19 @@ struct Triangle {
     Material mat;
 };
 
+struct HomogenousVolume {
+    float absorptionCoefficient; // range: [0, 1]
+    float scatteringCoefficient; // range: [0, 1]
+    float extinctionCoefficient; // can be calculated via absorption + scattering, but don't feel like recalculating every time
+    float padA; // std430 padding
+    
+    // needs a bounding box
+    vec3 minXYZ; // (x0, y0, z0)
+    float padB;
+    vec3 maxXYZ; // (x1, y1, z1)
+    float padC;  // these two vertices is all you need for a bounding box
+};
+
 // internal struct used by compute shader, do not need to std430 align (nor std140 align)
 struct Ray {
     vec3 origin;
@@ -55,9 +68,12 @@ struct Ray {
 struct Hit {
     int didHit;
     float t;
+    float tNear;
+    float tFar;
     vec3 position;
     vec3 normal;
     Material mat;
+    HomogenousVolume volume; // not always necessary
 };
 
 // layout bindings
@@ -70,6 +86,8 @@ layout(binding = 0) uniform UniformBufferObject {
     int NUM_SAMPLES;
     int MAX_DEPTH;
     int frameCount;
+    int homogenousVolumesCount;
+    float g; // Henyey-Greenstein asymmetry parameter. Range: [-1, 1]
 };
 layout (binding = 1, rgba32f) uniform image2D pixels;
 layout (std430, binding = 2) buffer SphereBuffer {
@@ -77,6 +95,9 @@ layout (std430, binding = 2) buffer SphereBuffer {
 };
 layout (std430, binding = 3) buffer TriangleBuffer {
     Triangle triangles[];
+};
+layout (std430, binding = 4) buffer HomogenousVolumesBuffer {
+    HomogenousVolume homogenousVolumes[];
 };
 
 uint state = uint(frameCount * 100);
@@ -122,18 +143,27 @@ Ray makeRayFromCameraThroughPixel() {
     );
 }
 
+Material createEmptyMaterial() {
+    return Material(
+        vec3(0),
+        0,
+        vec3(0),
+        0
+    );
+}
+
+HomogenousVolume createEmptyHomogenousVolume() {
+    return HomogenousVolume(0, 0, 0, 0, vec3(0), 0, vec3(0), 0);
+}
+
 Hit createEmptyHit() {
     return Hit(
-        0,
-        -1,
+        HIT_MISS,
+        -1, -1, -1, // t, tNear, and tFar
         vec3(0),
         vec3(0),
-        Material(
-            vec3(0),
-            0,
-            vec3(0),
-            0
-        )
+        createEmptyMaterial(),
+        createEmptyHomogenousVolume()
     );
 }
 
@@ -163,7 +193,7 @@ Hit intersectSphere(Ray ray, Sphere sphere) {
     vec3 hitPoint = ray.origin + t * ray.dir;
     vec3 normal = normalize(hitPoint - sphere.position);
 
-    return Hit(HIT_SUCCESS, t, hitPoint, normal, sphere.mat);
+    return Hit(HIT_SUCCESS, t, 0, 0, hitPoint, normal, sphere.mat, createEmptyHomogenousVolume());
 }
 
 Hit intersectTriangle(Ray ray, Triangle triangle) {
@@ -205,14 +235,62 @@ Hit intersectTriangle(Ray ray, Triangle triangle) {
         if (dot(normal, ray.dir) > 0) {
             normal *= -1; // flip normal if facing wrong direction
         }
-        return Hit(HIT_SUCCESS, t, hitPoint, normal, triangle.mat);
+        return Hit(HIT_SUCCESS, t, 0, 0, hitPoint, normal, triangle.mat, createEmptyHomogenousVolume());
     }
     else {
         return noHit;
     }
 }
 
-Hit findClosestIntersection(Ray ray) {
+Hit intersectHomogenousVolume(Ray ray, HomogenousVolume volume) {
+    // simple aabb intersection
+    vec3 invDir = 1.0 / ray.dir;
+    vec3 t1 = (volume.minXYZ - ray.origin) * invDir;
+    vec3 t2 = (volume.maxXYZ - ray.origin) * invDir;
+
+    // find near and far t values
+    float tNear = max(max(min(t1.x, t2.x), min(t1.y, t2.y)), min(t1.z, t2.z));
+
+    float tFar = min(min(max(t1.x, t2.x), max(t1.y, t2.y)), max(t1.z, t2.z));
+
+    // check for intersection
+    if (tNear <= tFar && tFar >= 0) {
+        // Return distance 'tNear' (if ray is outside) or 'tFar' (if inside)
+        float t = tNear < 0 ? tFar : tNear;
+        vec3 hitPoint = ray.origin + t * ray.dir;
+        
+        // IMPORTANT: setting normal to vec3(0) indicates to the trace function that the ray has hit a volume
+
+        return Hit(HIT_SUCCESS, t, tNear, tFar, hitPoint, vec3(0), createEmptyMaterial(), volume);
+    }
+
+    Hit noHit = createEmptyHit();
+    noHit.didHit = HIT_MISS;
+
+    return noHit; // No intersection
+}
+
+Hit findClosestVolume(Ray ray) {
+    Hit closestVolumeHit = createEmptyHit();
+    int firstVolume = 1;
+
+    // finally, lets do participating media
+    for (int i = 0; i < homogenousVolumesCount; i++) {
+        Hit hit = intersectHomogenousVolume(ray, homogenousVolumes[i]);
+        if (hit.didHit == HIT_MISS) continue;
+        if (firstVolume == 1) {
+            firstVolume = 0;
+            closestVolumeHit = hit;
+        }
+        else if (hit.t < closestVolumeHit.t) {
+            closestVolumeHit = hit;
+        }
+    }
+
+    return closestVolumeHit;
+}
+
+Hit findClosestSurface(Ray ray) {
     Hit closestHit = createEmptyHit();
     int first = 1;
     
@@ -281,16 +359,153 @@ vec3 randomCosineWeightedDir(vec3 normal) {
     return diffuseDir;
 }
 
+vec3 getNonParallelVector(vec3 v) {
+    if (dot(v, v) < 1e-6) {
+        return vec3(1.0, 0.0, 0.0);
+    }
+
+    vec3 absV = abs(v);
+    
+    vec3 basis;
+    if (absV.x <= absV.y && absV.x <= absV.z) {
+        basis = vec3(1.0, 0.0, 0.0);
+    } else if (absV.y <= absV.x && absV.y <= absV.z) {
+        basis = vec3(0.0, 1.0, 0.0);
+    } else {
+        basis = vec3(0.0, 0.0, 1.0);
+    }
+
+    // the cross product is guaranteed to be perpendicular (and not parallel) to v
+    return cross(v, basis);
+}
+
 vec3 traceRay(Ray ray) {
     vec3 incomingLight = vec3(0);
     vec3 rayColor = vec3(1);
 
     for (int i = 0; i < MAX_DEPTH; i++) {
-        Hit hit = findClosestIntersection(ray);
+        Hit hitSurface = findClosestSurface(ray); // surface hit
+        Hit hitVolume = findClosestVolume(ray);
+
+        if (hitSurface.didHit == HIT_MISS && hitVolume.didHit == HIT_MISS) {
+            vec3 skyColor = vec3(0.5, 0.7, 1.0);
+            incomingLight += skyColor * rayColor;
+            break; // ray did not hit anything (hit the sky) can safely exit
+        }
+
+        // find closest hit
+        Hit hit = createEmptyHit();
+        if (hitSurface.didHit == HIT_MISS)
+            hit = hitVolume;
+        else if (hitVolume.didHit == HIT_MISS)
+            hit = hitSurface;
+        else
+            hit = hitSurface.t < hitVolume.t ? hitSurface : hitVolume;
+
         vec3 point = hit.position;
         vec3 normal = hit.normal;
         Material mat = hit.mat;
-        if (hit.didHit == HIT_SUCCESS) {
+        HomogenousVolume volume = hit.volume;
+        if (normal == vec3(0)) { // little hack i did. null normal just means hit an aabb
+            // time to do some participating media stuff
+            float e1 = randf();
+            float d = -log(e1) / volume.extinctionCoefficient;
+
+            float tNear = hit.tNear;
+            float tFar = hit.tFar;
+
+            bool freeHitSurface = false;
+
+            if (hitSurface.didHit == HIT_SUCCESS) {
+                // recall that this aabb is intersected before the surface (if it exists)
+                // case 1: ray originates within the bounding box
+                if (tNear < 0 && d >= hitSurface.t) { // free path hits surface
+                    // do surface math
+                    freeHitSurface = true;
+                }
+                // case 2: ray originates outside the bounding box
+                // hitSurface.t <= tFar to check to make sure surface is inside the bounding box
+                else if (tNear >= 0 && tNear + d >= hitSurface.t && hitSurface.t <= tFar) {
+                    freeHitSurface = true;
+                }
+            }
+
+            // terrible fucking code flow, but it is what it is
+            // only had to copy and paste like 7 lines
+            if (freeHitSurface) {
+                // surface intersection
+                point = hitSurface.position;
+                normal = hitSurface.normal;
+                mat = hitSurface.mat;
+                ray.origin = point + 1e-4f * normal;
+                vec3 diffuseDir = randomCosineWeightedDir(normal); // random hemisphere cosine weighted direction
+                vec3 specularDir = reflect(ray.dir, normal);
+                ray.dir = mix(diffuseDir, specularDir, mat.reflectivity);
+
+                vec3 emittedLight = mat.emissionStrength * mat.emissionColor; // this object will emit light back into the camera
+                incomingLight += emittedLight * rayColor; // tint the color via the ray color so far
+                rayColor *= mat.color; // ray color absorbs some of the material's color
+            }
+            else {
+                // exit early if free path goes beyond the bounding box
+                if (
+                    hit.t < 0   // ray originated inside of bounding box
+                    && d > tFar // free path goes beyond the far hit point
+                ) {
+                    ray.origin += (tFar + 1e-4) * ray.dir; // leave bounding box while maintaing same direction
+                    continue;
+                }
+                else if (tNear >= 0 && d > tFar - tNear) {
+                    ray.origin += (tFar + 1e-4) * ray.dir; // leave bounding box while maintaing same direction
+                    continue;
+                }
+
+                float p_scatter = volume.scatteringCoefficient / volume.extinctionCoefficient;
+                float e2 = randf();
+                if (e2 < p_scatter) {
+                    // scatter
+                    // Henyey-Greenstein phase function gives cos(theta), where theta is the polar angle
+                    // of the new direction relative to the original ray origin + direction
+                    // Read here for more detail: https://zydak.github.io/Clouds/index.html
+                    float e3 = randf();
+                    float cos_theta;
+                    if (g == 0) {
+                        cos_theta = 2 * e3 - 1;
+                    }
+                    else {
+                        cos_theta = 1 / (2 * g) * (1 + g * g - pow((1 - g * g) / (1 - g + 2 * g * e3), 2));
+                    }
+
+                    // float sin_theta = sin(acos(cos_theta));
+                    cos_theta = clamp(cos_theta, -1.0, 1.0); // clamp is just in case of floating error
+                    float sin_theta = sqrt(max(0.0, 1.0 - cos_theta * cos_theta)); // this is faster
+
+                    float e4 = randf();
+                    float phi = 6.28318530718 * e4; // 2piE, where E = Uniform(0, 1)
+
+                    vec3 u = getNonParallelVector(ray.dir);
+                    vec3 v = normalize(ray.dir);
+                    
+                    vec3 t = normalize(cross(u, v));
+                    vec3 b = cross(v, t);
+                    vec3 w = sin_theta * cos(phi) * t + sin_theta * sin(phi) * b + cos_theta * v;
+                    w = normalize(w); // just in case lmao
+
+                    // scatter ray at this position
+                    ray.origin = hit.position + d * ray.dir + 1e-4 * w;
+                    ray.dir = w; // this is new direction
+                    continue; // continue onto next iteration as to skip the surface intersection code
+                }
+                else {
+                    // ray gets absorbed (ray is simply terminated, no need to do anything here)
+                    vec3 skyColor = vec3(0.5, 0.7, 1.0); // hit it with ambient light
+                    incomingLight += skyColor * rayColor;
+                    break;
+                }
+            }
+        }
+        else {
+            // surface intersection
             ray.origin = hit.position + 1e-4f * normal;
             vec3 diffuseDir = randomCosineWeightedDir(normal); // random hemisphere cosine weighted direction
             vec3 specularDir = reflect(ray.dir, normal);
@@ -299,11 +514,6 @@ vec3 traceRay(Ray ray) {
             vec3 emittedLight = mat.emissionStrength * mat.emissionColor; // this object will emit light back into the camera
             incomingLight += emittedLight * rayColor; // tint the color via the ray color so far
             rayColor *= mat.color; // ray color absorbs some of the material's color
-        }
-        else {
-            vec3 skyColor = vec3(0.5, 0.7, 1.0);
-            incomingLight += skyColor * rayColor;
-            break; // ray did not hit anything (hit the sky) can safely exit
         }
     }
 

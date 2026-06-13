@@ -111,6 +111,7 @@ CMakeFiles/vk_app.dir/src/main.c.o: \
   /usr/local/include/vk_video/vulkan_video_codec_vp9std_decode.h \
   /usr/local/include/vulkan/vulkan_beta.h \
   /usr/local/include/GLFW/glfw3.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/objects.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/sphere.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/cglm.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/common.h \
@@ -194,6 +195,7 @@ CMakeFiles/vk_app.dir/src/main.c.o: \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/cglm/include/cglm/affine2d-post.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/material/material.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/triangle.h \
+  /Users/henryzhang/Documents/vulkan-projects/raytracing/src/objects/volume.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/camera/camera.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/swapchain.h \
   /Users/henryzhang/Documents/vulkan-projects/raytracing/src/renderer/commands.h \
