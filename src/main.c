@@ -4,14 +4,16 @@
 #include "cglm/cglm.h"
 
 #define NUM_SAMPLES 1
-#define MAX_DEPTH 20
+#define MAX_DEPTH 30
 #define ASYMMETRY_PARAMETER 0.98 // Henyey-Greenstein asymmetry parameter. Range: [-1, 1]
 #define MAX_FRAMES_RAN 100
-#define STOP 1
+#define STOP 0
 
 #define RENDER_SPHERES
 #define RENDER_TRIANGLES
 #define RENDER_HOMOGENOUS_VOLUMES
+#define RENDER_EMISSIVE_SPHERES
+#define RENDER_EMISSIVE_TRIANGLES
 
 void updateUniforms(vk_context *vko, uint32_t currentFrame) {
     UniformBufferObject ubo = {0};
@@ -41,6 +43,21 @@ void updateUniforms(vk_context *vko, uint32_t currentFrame) {
     ubo.maxDepth = MAX_DEPTH;
     ubo.frameCount = vko->frameCount;
     ubo.g = ASYMMETRY_PARAMETER;
+
+    #ifdef RENDER_EMISSIVE_SPHERES
+        ubo.emissiveSpheresCount = vko->emissiveSpheresCount;
+    #else
+        ubo.emissiveSpheresCount = 0;
+    #endif
+
+    #ifdef RENDER_EMISSIVE_TRIANGLES
+        ubo.emissiveTrianglesCount = vko->emissiveTrianglesCount;
+    #else
+        ubo.emissiveTrianglesCount = 0;
+    #endif
+
+    ubo.totalFrameCount = vko->totalFrameCount;
+
     memcpy(vko->uniformBuffersMapped[currentFrame], &ubo, sizeof(UniformBufferObject));
 }
 
@@ -175,6 +192,7 @@ void mainLoop(vk_context *vko) {
     uint32_t currentFrame = 0;
 
     vko->frameCount = 0;
+    vko->totalFrameCount = 0;
 
     double xpos;
     double ypos;
@@ -193,7 +211,7 @@ void mainLoop(vk_context *vko) {
             initializeCamera(vko);
             updateCamera(vko);
         }
-        
+        vko->totalFrameCount++;
         updateCamera(vko);
         if (STOP && vko->frameCount >= MAX_FRAMES_RAN) {
             continue;
@@ -271,7 +289,7 @@ void lookat(vk_context *vko, vec3 target) {
 
 void initializeCamera(vk_context *vko) {
     vko->cam = (Camera) {
-        .position = { 0, -9, 0 },
+        .position = { 0, -9, 10 },
         .forward = { 0, 1, 0 },
         .right = { 1, 0, 0 },
         .up = { 0, 0, 1 }
@@ -286,7 +304,7 @@ float randf() {
 }
 
 void initializeSpheresCPU(vk_context *vko) {
-    for (int i = 0; i < 200; i++) {
+    for (int i = 0; i < 100; i++) {
         float r = 0.5 * (0.5 * (randf()) + 0.2);
         vko->spheres[vko->sphereCount++] = (Sphere) {
             .position = {5 * (2 * randf() - 1), 5 * (2 * randf() - 1), r},
@@ -295,7 +313,24 @@ void initializeSpheresCPU(vk_context *vko) {
                 .color = {randf(), randf(), randf()},
                 .emissionColor = {1, 1, 1},
                 .emissionStrength = 0.00,
-                .reflectivity = randf()
+                // .reflectivity = randf()
+                .reflectivity = 0.00
+            }
+        };
+        glm_vec3_copy(vko->spheres[vko->sphereCount - 1].mat.color, vko->spheres[vko->sphereCount - 1].mat.emissionColor);
+    }
+
+    for (int i = 0; i < 1; i++) {
+        vko->emissiveSpheres[vko->emissiveSpheresCount++] = (Sphere) {
+            .position = {-100, 0, 120},
+            .radius = 140,
+            // .position = {5 * (2 * randf() - 1), 5 * (2 * randf() - 1), 0.5},
+            // .radius = 0.15 * randf() + 0.10,
+            .mat = (Material) {
+                .color = {1, 1, 1},
+                .emissionColor = {1, 1, 1},
+                .emissionStrength = 1.0,
+                .reflectivity = 1.00
             }
         };
     }
@@ -303,158 +338,158 @@ void initializeSpheresCPU(vk_context *vko) {
 
 void initializeTrianglesCPU(vk_context *vko) {
     // triangle 1 for ceiling
-    // vko->triangles[vko->triangleCount++] = (Triangle) {
-    //     .v0 = {-10, 10, 10},
-    //     .v1 = {10, -10, 10},
-    //     .v2 = {-10, -10, 10},
-    //     .mat = (Material) {
-    //         .color = {1, 1, 1},
-    //         .emissionColor = {1, 1, 1},
-    //         .emissionStrength = 0,
-    //         .reflectivity = 1.00
-    //     }
-    // };
-
-    // // triangle 2 for ceiling
-    // vko->triangles[vko->triangleCount++] = (Triangle) {
-    //     .v0 = {-10, 10, 10},
-    //     .v1 = {10, 10, 10},
-    //     .v2 = {10, -10, 10},
-    //     .mat = (Material) {
-    //         .color = {1, 1, 1},
-    //         .emissionColor = {1, 1, 1},
-    //         .emissionStrength = 0,
-    //         .reflectivity = 1.00
-    //     }
-    // };
-
-    // // triangle 1 for left wall
-    // vko->triangles[vko->triangleCount++] = (Triangle) {
-    //     .v0 = {-10, 10, 10},
-    //     .v1 = {-10, -10, 10},
-    //     .v2 = {-10, -10, -10},
-    //     .mat = (Material) {
-    //         .color = {1, 0, 1},
-    //         .emissionColor = {1, 0, 0},
-    //         .emissionStrength = 0.0,
-    //         .reflectivity = 1.00
-    //     }
-    // };
-
-    // // triangle 2 for left wall
-    // vko->triangles[vko->triangleCount++] = (Triangle) {
-    //     .v0 = {-10, -10, -10},
-    //     .v1 = {-10, 10, -10},
-    //     .v2 = {-10, 10, 10},
-    //     .mat = (Material) {
-    //         .color = {1, 0, 1},
-    //         .emissionColor = {1, 0, 0},
-    //         .emissionStrength = 0,
-    //         .reflectivity = 1.00
-    //     }
-    // };
-
-    // // triangle 1 for right wall
-    // vko->triangles[vko->triangleCount++] = (Triangle) {
-    //     .v0 = {10, 10, 10},
-    //     .v1 = {10, -10, 10},
-    //     .v2 = {10, -10, -10},
-    //     .mat = (Material) {
-    //         .color = {0, 1, 1},
-    //         .emissionColor = {0, 1, 0},
-    //         .emissionStrength = 0.0,
-    //         .reflectivity = 1.00
-    //     }
-    // };
-
-    // // triangle 2 for right wall
-    // vko->triangles[vko->triangleCount++] = (Triangle) {
-    //     .v0 = {10, -10, -10},
-    //     .v1 = {10, 10, -10},
-    //     .v2 = {10, 10, 10},
-    //     .mat = (Material) {
-    //         .color = {0, 1, 1},
-    //         .emissionColor = {0, 1, 0},
-    //         .emissionStrength = 0.0,
-    //         .reflectivity = 1.00
-    //     }
-    // };
-
-    // // triangle 1 for back wall
-    // vko->triangles[vko->triangleCount++] = (Triangle) {
-    //     .v0 = {-10, 10, 10},
-    //     .v1 = {10, 10, 10},
-    //     .v2 = {10, 10, -10},
-    //     .mat = (Material) {
-    //         .color = {0.5, 0.5, 0.5},
-    //         .emissionColor = {0, 0, 0},
-    //         .emissionStrength = 0.0,
-    //         .reflectivity = 1.00
-    //     }
-    // };
-
-    // // triangle 2 for back wall
-    // vko->triangles[vko->triangleCount++] = (Triangle) {
-    //     .v0 = {10, 10, -10},
-    //     .v1 = {-10, 10, -10},
-    //     .v2 = {-10, 10, 10},
-    //     .mat = (Material) {
-    //         .color = {0.5, 0.5, 0.5},
-    //         .emissionColor = {0, 0, 0},
-    //         .emissionStrength = 0.0,
-    //         .reflectivity = 1.00
-    //     }
-    // };
-
-    // // triangle 1 for front wall
-    // vko->triangles[vko->triangleCount++] = (Triangle) {
-    //     .v0 = {-10, -10, 10},
-    //     .v1 = {10, -10, 10},
-    //     .v2 = {10, -10, -10},
-    //     .mat = (Material) {
-    //         .color = {1, 1, 1},
-    //         .emissionColor = {0, 0, 0},
-    //         .emissionStrength = 0.0,
-    //         .reflectivity = 1.00
-    //     }
-    // };
-
-    // // triangle 2 for front wall
-    // vko->triangles[vko->triangleCount++] = (Triangle) {
-    //     .v0 = {10, -10, -10},
-    //     .v1 = {-10, -10, -10},
-    //     .v2 = {-10, -10, 10},
-    //     .mat = (Material) {
-    //         .color = {1, 1, 1},
-    //         .emissionColor = {0, 0, 0},
-    //         .emissionStrength = 0.0,
-    //         .reflectivity = 1.00
-    //     }
-    // };
-
-    // triangle 1 for floor
     vko->triangles[vko->triangleCount++] = (Triangle) {
-        .v0 = {-5.5, 5.5, 0},
-        .v1 = {5.5, -5.5, 0},
-        .v2 = {-5.5, -5.5, 0},
+        .v0 = {-5, 6, 6},
+        .v1 = {6, -6, 6},
+        .v2 = {-5, -6, 6},
         .mat = (Material) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 1, 1},
             .emissionStrength = 0,
-            .reflectivity = 1.00
+            .reflectivity = 0.00
+        }
+    };
+
+    // triangle 2 for ceiling
+    vko->triangles[vko->triangleCount++] = (Triangle) {
+        .v0 = {-5, 6, 6},
+        .v1 = {6, 6, 6},
+        .v2 = {6, -6, 6},
+        .mat = (Material) {
+            .color = {0.5, 0.5, 0.5},
+            .emissionColor = {1, 1, 1},
+            .emissionStrength = 0,
+            .reflectivity = 0.00
+        }
+    };
+
+    // triangle 1 for left wall
+    vko->triangles[vko->triangleCount++] = (Triangle) {
+        .v0 = {-6, 6, 5},
+        .v1 = {-6, -6, 5},
+        .v2 = {-6, -6, -5},
+        .mat = (Material) {
+            .color = {0.5, 0.5, 0.5},
+            .emissionColor = {1, 0, 0},
+            .emissionStrength = 0.0,
+            .reflectivity = 0.00
+        }
+    };
+
+    // triangle 2 for left wall
+    vko->triangles[vko->triangleCount++] = (Triangle) {
+        .v0 = {-6, -6, -5},
+        .v1 = {-6, 6, -5},
+        .v2 = {-6, 6, 5},
+        .mat = (Material) {
+            .color = {0.5, 0.5, 0.5},
+            .emissionColor = {1, 0, 0},
+            .emissionStrength = 0,
+            .reflectivity = 0.00
+        }
+    };
+
+    // triangle 1 for right wall
+    vko->triangles[vko->triangleCount++] = (Triangle) {
+        .v0 = {6, 6, 6},
+        .v1 = {6, -6, 6},
+        .v2 = {6, -6, -6},
+        .mat = (Material) {
+            .color = {0.5, 0.5, 0.5},
+            .emissionColor = {0, 1, 0},
+            .emissionStrength = 0.0,
+            .reflectivity = 0.00
+        }
+    };
+
+    // triangle 2 for right wall
+    vko->triangles[vko->triangleCount++] = (Triangle) {
+        .v0 = {6, -6, -6},
+        .v1 = {6, 6, -6},
+        .v2 = {6, 6, 6},
+        .mat = (Material) {
+            .color = {0.5, 0.5, 0.5},
+            .emissionColor = {0, 1, 0},
+            .emissionStrength = 0.0,
+            .reflectivity = 0.00
+        }
+    };
+
+    // triangle 1 for back wall
+    vko->triangles[vko->triangleCount++] = (Triangle) {
+        .v0 = {-6, 6, 6},
+        .v1 = {6, 6, 6},
+        .v2 = {6, 6, -6},
+        .mat = (Material) {
+            .color = {0.5, 0.5, 0.5},
+            .emissionColor = {0, 0, 0},
+            .emissionStrength = 0.0,
+            .reflectivity = 0.00
+        }
+    };
+
+    // triangle 2 for back wall
+    vko->triangles[vko->triangleCount++] = (Triangle) {
+        .v0 = {6, 6, -6},
+        .v1 = {-6, 6, -6},
+        .v2 = {-6, 6, 6},
+        .mat = (Material) {
+            .color = {0.5, 0.5, 0.5},
+            .emissionColor = {0, 0, 0},
+            .emissionStrength = 0.0,
+            .reflectivity = 0.00
+        }
+    };
+
+    // triangle 1 for front wall
+    vko->triangles[vko->triangleCount++] = (Triangle) {
+        .v0 = {-6, -6, 6},
+        .v1 = {6, -6, 6},
+        .v2 = {6, -6, -6},
+        .mat = (Material) {
+            .color = {0.5, 0.5, 0.5},
+            .emissionColor = {0, 0, 0},
+            .emissionStrength = 0.0,
+            .reflectivity = 0.00
+        }
+    };
+
+    // triangle 2 for front wall
+    vko->triangles[vko->triangleCount++] = (Triangle) {
+        .v0 = {6, -6, -6},
+        .v1 = {-6, -6, -6},
+        .v2 = {-6, -6, 6},
+        .mat = (Material) {
+            .color = {0.5, 0.5, 0.5},
+            .emissionColor = {0, 0, 0},
+            .emissionStrength = 0.0,
+            .reflectivity = 0.00
+        }
+    };
+
+    // triangle 1 for floor
+    vko->triangles[vko->triangleCount++] = (Triangle) {
+        .v0 = {-6, 6, 0},
+        .v1 = {6, -6, 0},
+        .v2 = {-6, -6, 0},
+        .mat = (Material) {
+            .color = {0.5, 0.5, 0.5},
+            .emissionColor = {1, 1, 1},
+            .emissionStrength = 0.00,
+            .reflectivity = 0.00
         }
     };
 
     // triangle 2 for floor
     vko->triangles[vko->triangleCount++] = (Triangle) {
-        .v0 = {-5.5, 5.5, 0},
-        .v1 = {5.5, 5.5, 0},
-        .v2 = {5.5, -5.5, 0},
+        .v0 = {-6, 6, 0},
+        .v1 = {6, 6, 0},
+        .v2 = {6, -6, 0},
         .mat = (Material) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 1, 1},
-            .emissionStrength = 0,
-            .reflectivity = 1.00
+            .emissionStrength = 0.00,
+            .reflectivity = 0.00
         }
     };
 
@@ -485,42 +520,45 @@ void initializeTrianglesCPU(vk_context *vko) {
     // };
 
     // triangle 1 for ceiling light
-    vko->triangles[vko->triangleCount++] = (Triangle) {
+    vko->emissiveTriangles[vko->emissiveTrianglesCount++] = (Triangle) {
         .v0 = {-50, 50, 100},
         .v1 = {50, -50, 100},
         .v2 = {-50, -50, 100},
         .mat = (Material) {
             .color = {1, 1, 1},
             .emissionColor = {1, 1, 1},
-            .emissionStrength = 1.0,
-            .reflectivity = 0.00
+            .emissionStrength = 0.0,
+            .reflectivity = 1.00
         }
     };
 
     // triangle 2 for ceiling light
-    vko->triangles[vko->triangleCount++] = (Triangle) {
+    vko->emissiveTriangles[vko->emissiveTrianglesCount++] = (Triangle) {
         .v0 = {-50, 50, 100},
         .v1 = {50, 50, 100},
         .v2 = {50, -50, 100},
         .mat = (Material) {
             .color = {1, 1, 1},
             .emissionColor = {1, 1, 1},
-            .emissionStrength = 1.0,
-            .reflectivity = 0.00
+            .emissionStrength = 0.0,
+            .reflectivity = 1.00
         }
     };
 }
 
 void initializeHomogenousVolumesCPU(vk_context *vko) {
-    float absorptionCoefficient = 0.50;
-    float scatteringCoefficient = 0.50;
-    float extinctionCoefficient = absorptionCoefficient + scatteringCoefficient;
+    vec3 absorptionCoefficient = {0.8, 0.2, 0.05};
+    // vec3 absorptionCoefficient = {0.00, 0.00, 0};
+    vec3 scatteringCoefficient = {0.05, 0.15, 0.35};
+    // vec3 scatteringCoefficient = {0.99, 0.99, 0.0};
+    vec3 extinctionCoefficient;
+    glm_vec3_add(absorptionCoefficient, scatteringCoefficient, extinctionCoefficient);
     vko->homogenousVolumes[vko->homogenousVolumesCount++] = (HomogenousVolume) {
-        .absorptionCoefficient = absorptionCoefficient,
-        .scatteringCoefficient = scatteringCoefficient,
-        .extinctionCoefficient = extinctionCoefficient,
-        .minXYZ = {-3, -3, 0.01}, // bounding box
-        .maxXYZ = {3, 3, 1}
+        .absorptionCoefficient = {absorptionCoefficient[0], absorptionCoefficient[1], absorptionCoefficient[2]},
+        .scatteringCoefficient = {scatteringCoefficient[0], scatteringCoefficient[1], scatteringCoefficient[2]},
+        .extinctionCoefficient = {extinctionCoefficient[0], extinctionCoefficient[1], extinctionCoefficient[2]},
+        .minXYZ = {-5.999, -5.999, 0.001}, // bounding box
+        .maxXYZ = {-4.999, 5.999, 8.999}
     };
 }
 

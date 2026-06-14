@@ -426,6 +426,8 @@ static void initVulkan(vk_context *vko) {
     initializeBufferGPU(vko, vko->spheres, &vko->sphereBuffer, &vko->sphereMemory, vko->sphereCount * sizeof(Sphere));
     initializeBufferGPU(vko, vko->triangles, &vko->triangleBuffer, &vko->triangleMemory, vko->triangleCount * sizeof(Triangle));
     initializeBufferGPU(vko, vko->homogenousVolumes, &vko->homogenousVolumesBuffer, &vko->homogenousVolumesMemory, vko->homogenousVolumesCount * sizeof(HomogenousVolume));
+    initializeBufferGPU(vko, vko->emissiveSpheres, &vko->emissiveSpheresBuffer, &vko->emissiveSpheresMemory, vko->emissiveSpheresCount * sizeof(Sphere));
+    initializeBufferGPU(vko, vko->emissiveTriangles, &vko->emissiveTrianglesBuffer, &vko->emissiveTrianglesMemory, vko->emissiveTrianglesCount * sizeof(Triangle));
     createDescriptorSetLayout(vko);
     createDescriptorPool(vko);
     createDescriptorSets(vko);
@@ -457,6 +459,10 @@ void cleanupRenderer(vk_context *vko) {
     vkFreeMemory(vko->device, vko->triangleMemory, NULL);
     vkDestroyBuffer(vko->device, vko->homogenousVolumesBuffer, NULL);
     vkFreeMemory(vko->device, vko->homogenousVolumesMemory, NULL);
+    vkDestroyBuffer(vko->device, vko->emissiveSpheresBuffer, NULL);
+    vkFreeMemory(vko->device, vko->emissiveSpheresMemory, NULL);
+    vkDestroyBuffer(vko->device, vko->emissiveTrianglesBuffer, NULL);
+    vkFreeMemory(vko->device, vko->emissiveTrianglesMemory, NULL);
     vkFreeMemory(vko->device, vko->screenQuadBufferMemory, NULL);
     vkDestroySampler(vko->device, vko->storageSampler, NULL);
     vkDestroyImageView(vko->device, vko->storageImageView, NULL);

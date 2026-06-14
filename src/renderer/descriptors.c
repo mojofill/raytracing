@@ -37,12 +37,26 @@ void createDescriptorSetLayout(vk_context *vko) {
     homogenousVolumesBufferLayoutBinding.descriptorCount = 1;
     homogenousVolumesBufferLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-    VkDescriptorSetLayoutBinding bindings[5] = { uboLayoutBinding, imageLayoutBinding, sphereBufferLayoutBinding, triangleBufferLayoutBinding, homogenousVolumesBufferLayoutBinding };
+    // homogenous volumes buffer
+    VkDescriptorSetLayoutBinding emissiveSpheresBufferLayoutBinding = {0};
+    emissiveSpheresBufferLayoutBinding.binding = 5;
+    emissiveSpheresBufferLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    emissiveSpheresBufferLayoutBinding.descriptorCount = 1;
+    emissiveSpheresBufferLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    // homogenous volumes buffer
+    VkDescriptorSetLayoutBinding emissiveTrianglesBufferLayoutBinding = {0};
+    emissiveTrianglesBufferLayoutBinding.binding = 6;
+    emissiveTrianglesBufferLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    emissiveTrianglesBufferLayoutBinding.descriptorCount = 1;
+    emissiveTrianglesBufferLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    VkDescriptorSetLayoutBinding bindings[7] = { uboLayoutBinding, imageLayoutBinding, sphereBufferLayoutBinding, triangleBufferLayoutBinding, homogenousVolumesBufferLayoutBinding, emissiveSpheresBufferLayoutBinding, emissiveTrianglesBufferLayoutBinding };
 
     VkDescriptorSetLayoutCreateInfo layoutInfo = {0};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutInfo.pBindings = bindings;
-    layoutInfo.bindingCount = 5;
+    layoutInfo.bindingCount = 7;
 
     if (vkCreateDescriptorSetLayout(vko->device, &layoutInfo, NULL, &vko->descriptorSetLayout) != VK_SUCCESS) {
         printf("Failed to create descriptor set layout\n");
@@ -61,7 +75,7 @@ void createUniformBuffer(vk_context *vko) {
 }
 
 void createDescriptorPool(vk_context *vko) {
-    VkDescriptorPoolSize poolSizes[5]; // adjust for however many uniforms you want
+    VkDescriptorPoolSize poolSizes[7]; // adjust for however many uniforms you want
     // only one singular uniform buffer object needs to be allocated
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = (uint32_t) MAX_FRAMES_IN_FLIGHT;
@@ -78,9 +92,15 @@ void createDescriptorPool(vk_context *vko) {
     poolSizes[4].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     poolSizes[4].descriptorCount = (uint32_t) MAX_FRAMES_IN_FLIGHT;
 
+    poolSizes[5].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    poolSizes[5].descriptorCount = (uint32_t) MAX_FRAMES_IN_FLIGHT;
+
+    poolSizes[6].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    poolSizes[6].descriptorCount = (uint32_t) MAX_FRAMES_IN_FLIGHT;
+
     VkDescriptorPoolCreateInfo poolInfo = {0};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = 5;
+    poolInfo.poolSizeCount = 7;
     poolInfo.pPoolSizes = poolSizes;
     poolInfo.maxSets = (uint32_t) MAX_FRAMES_IN_FLIGHT;
 
@@ -135,8 +155,18 @@ void createDescriptorSets(vk_context *vko) {
         homogenousVolumesBufferInfo.offset = 0;
         homogenousVolumesBufferInfo.range = vko->homogenousVolumesCount * sizeof(HomogenousVolume);
 
+        VkDescriptorBufferInfo emissiveSpheresBufferInfo = {0};
+        emissiveSpheresBufferInfo.buffer = vko->emissiveSpheresBuffer;
+        emissiveSpheresBufferInfo.offset = 0;
+        emissiveSpheresBufferInfo.range = vko->emissiveSpheresCount * sizeof(Sphere);
+
+        VkDescriptorBufferInfo emissiveTrianglesBufferInfo = {0};
+        emissiveTrianglesBufferInfo.buffer = vko->emissiveTrianglesBuffer;
+        emissiveTrianglesBufferInfo.offset = 0;
+        emissiveTrianglesBufferInfo.range = vko->emissiveTrianglesCount * sizeof(Triangle);
+
         // write to descriptor set
-        VkWriteDescriptorSet descriptorWrites[5] = {0}; // can add more descriptor sets if necessary
+        VkWriteDescriptorSet descriptorWrites[7] = {0}; // can add more descriptor sets if necessary
         // such as samplers or storage buffers
 
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -179,6 +209,22 @@ void createDescriptorSets(vk_context *vko) {
         descriptorWrites[4].descriptorCount = 1;
         descriptorWrites[4].pBufferInfo = &homogenousVolumesBufferInfo;
 
-        vkUpdateDescriptorSets(vko->device, 5, descriptorWrites, 0, NULL);
+        descriptorWrites[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[5].dstSet = vko->descriptorSets[i];
+        descriptorWrites[5].dstBinding = 5; // binding = 5 in the shader
+        descriptorWrites[5].dstArrayElement = 0;
+        descriptorWrites[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptorWrites[5].descriptorCount = 1;
+        descriptorWrites[5].pBufferInfo = &emissiveSpheresBufferInfo;
+
+        descriptorWrites[6].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[6].dstSet = vko->descriptorSets[i];
+        descriptorWrites[6].dstBinding = 6; // binding = 6 in the shader
+        descriptorWrites[6].dstArrayElement = 0;
+        descriptorWrites[6].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptorWrites[6].descriptorCount = 1;
+        descriptorWrites[6].pBufferInfo = &emissiveTrianglesBufferInfo;
+
+        vkUpdateDescriptorSets(vko->device, 7, descriptorWrites, 0, NULL);
     }
 }

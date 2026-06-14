@@ -30,6 +30,9 @@ typedef struct UniformBufferObject {
     int frameCount; // for fragment shader
     int homogenousVolumesCount; // adding here for maximum safety of std430 padding
     float g; // Henyey-Greenstein asymmetry parameter. Range: [-1, 1]
+    int emissiveSpheresCount;
+    int emissiveTrianglesCount;
+    int totalFrameCount;
 } UniformBufferObject;
 
 typedef struct vk_context {
@@ -79,6 +82,7 @@ typedef struct vk_context {
     int height;
 
     int frameCount;
+    int totalFrameCount;
 
     // Uniform buffer
     VkBuffer uniformBuffers[UNIFORM_BUFFER_COUNT];
@@ -97,6 +101,10 @@ typedef struct vk_context {
     VkDeviceMemory triangleMemory;
     VkBuffer homogenousVolumesBuffer;
     VkDeviceMemory homogenousVolumesMemory;
+    VkBuffer emissiveSpheresBuffer;
+    VkDeviceMemory emissiveSpheresMemory;
+    VkBuffer emissiveTrianglesBuffer;
+    VkDeviceMemory emissiveTrianglesMemory;
 
     Sphere spheres[500];
     int sphereCount;
@@ -105,6 +113,12 @@ typedef struct vk_context {
     HomogenousVolume homogenousVolumes[500];
     int homogenousVolumesCount;
     Camera cam;
+
+    // add emissive geometries
+    Sphere emissiveSpheres[500];
+    int emissiveSpheresCount;
+    Triangle emissiveTriangles[500];
+    int emissiveTrianglesCount;
 
     // Dynamic pipeline bindings
     VkViewport viewport;
