@@ -4,16 +4,16 @@
 #include "cglm/cglm.h"
 
 #define NUM_SAMPLES 1
-#define MAX_DEPTH 30
+#define MAX_DEPTH 5
 #define ASYMMETRY_PARAMETER 0.98 // Henyey-Greenstein asymmetry parameter. Range: [-1, 1]
 #define MAX_FRAMES_RAN 100
 #define STOP 0
 
-#define RENDER_SPHERES
-#define RENDER_TRIANGLES
+// #define RENDER_SPHERES
+// #define RENDER_TRIANGLES
 #define RENDER_HOMOGENOUS_VOLUMES
 #define RENDER_EMISSIVE_SPHERES
-#define RENDER_EMISSIVE_TRIANGLES
+// #define RENDER_EMISSIVE_TRIANGLES
 
 void updateUniforms(vk_context *vko, uint32_t currentFrame) {
     UniformBufferObject ubo = {0};
@@ -322,15 +322,17 @@ void initializeSpheresCPU(vk_context *vko) {
 
     for (int i = 0; i < 1; i++) {
         vko->emissiveSpheres[vko->emissiveSpheresCount++] = (Sphere) {
-            .position = {-100, 0, 120},
-            .radius = 140,
+            // .position = {-100, 0, 120},
+            // .radius = 40,
+            .position = {21, 0, 4},
+            .radius = 10,
             // .position = {5 * (2 * randf() - 1), 5 * (2 * randf() - 1), 0.5},
             // .radius = 0.15 * randf() + 0.10,
             .mat = (Material) {
                 .color = {1, 1, 1},
                 .emissionColor = {1, 1, 1},
-                .emissionStrength = 1.0,
-                .reflectivity = 1.00
+                .emissionStrength = 10.0,
+                .reflectivity = 0.00
             }
         };
     }
@@ -339,9 +341,9 @@ void initializeSpheresCPU(vk_context *vko) {
 void initializeTrianglesCPU(vk_context *vko) {
     // triangle 1 for ceiling
     vko->triangles[vko->triangleCount++] = (Triangle) {
-        .v0 = {-5, 6, 6},
+        .v0 = {-5.5, 6, 6},
         .v1 = {6, -6, 6},
-        .v2 = {-5, -6, 6},
+        .v2 = {-5.5, -6, 6},
         .mat = (Material) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 1, 1},
@@ -352,7 +354,7 @@ void initializeTrianglesCPU(vk_context *vko) {
 
     // triangle 2 for ceiling
     vko->triangles[vko->triangleCount++] = (Triangle) {
-        .v0 = {-5, 6, 6},
+        .v0 = {-5.5, 6, 6},
         .v1 = {6, 6, 6},
         .v2 = {6, -6, 6},
         .mat = (Material) {
@@ -365,9 +367,9 @@ void initializeTrianglesCPU(vk_context *vko) {
 
     // triangle 1 for left wall
     vko->triangles[vko->triangleCount++] = (Triangle) {
-        .v0 = {-6, 6, 5},
-        .v1 = {-6, -6, 5},
-        .v2 = {-6, -6, -5},
+        .v0 = {-6, 6, 5.5},
+        .v1 = {-6, -6, 5.5},
+        .v2 = {-6, -6, -5.5},
         .mat = (Material) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 0, 0},
@@ -378,9 +380,9 @@ void initializeTrianglesCPU(vk_context *vko) {
 
     // triangle 2 for left wall
     vko->triangles[vko->triangleCount++] = (Triangle) {
-        .v0 = {-6, -6, -5},
-        .v1 = {-6, 6, -5},
-        .v2 = {-6, 6, 5},
+        .v0 = {-6, -6, -5.5},
+        .v1 = {-6, 6, -5.5},
+        .v2 = {-6, 6, 5.5},
         .mat = (Material) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 0, 0},
@@ -528,7 +530,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {1, 1, 1},
             .emissionColor = {1, 1, 1},
             .emissionStrength = 0.0,
-            .reflectivity = 1.00
+            .reflectivity = 0.00
         }
     };
 
@@ -541,16 +543,14 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {1, 1, 1},
             .emissionColor = {1, 1, 1},
             .emissionStrength = 0.0,
-            .reflectivity = 1.00
+            .reflectivity = 0.00
         }
     };
 }
 
 void initializeHomogenousVolumesCPU(vk_context *vko) {
-    vec3 absorptionCoefficient = {0.8, 0.2, 0.05};
-    // vec3 absorptionCoefficient = {0.00, 0.00, 0};
-    vec3 scatteringCoefficient = {0.05, 0.15, 0.35};
-    // vec3 scatteringCoefficient = {0.99, 0.99, 0.0};
+    vec3 absorptionCoefficient = {0.000, 0.000, 0.000};
+    vec3 scatteringCoefficient = {0.95, 0.95, 0.95};
     vec3 extinctionCoefficient;
     glm_vec3_add(absorptionCoefficient, scatteringCoefficient, extinctionCoefficient);
     vko->homogenousVolumes[vko->homogenousVolumesCount++] = (HomogenousVolume) {
@@ -558,7 +558,7 @@ void initializeHomogenousVolumesCPU(vk_context *vko) {
         .scatteringCoefficient = {scatteringCoefficient[0], scatteringCoefficient[1], scatteringCoefficient[2]},
         .extinctionCoefficient = {extinctionCoefficient[0], extinctionCoefficient[1], extinctionCoefficient[2]},
         .minXYZ = {-5.999, -5.999, 0.001}, // bounding box
-        .maxXYZ = {-4.999, 5.999, 8.999}
+        .maxXYZ = {5.999, 5.999, 5.999}
     };
 }
 

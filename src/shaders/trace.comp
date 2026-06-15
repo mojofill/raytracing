@@ -373,7 +373,6 @@ bool isInShadow(Ray shadowRay, float maxDist) {
     int first = 1;
     
     // for now, all objects are spheres. in the future will add a triangle
-    // for now, all objects are spheres. in the future will add a triangle
     for (int i = 0; i < sphereCount; i++) {
         Hit hit = intersectSphere(shadowRay, spheres[i]);
         if (hit.didHit == HIT_SUCCESS && hit.t <= maxDist) return true;
@@ -444,7 +443,7 @@ vec3 getNonParallelVector(vec3 v) {
     return cross(v, basis);
 }
 
-vec3 randomPointOnSphere(Sphere sphere) {
+vec3 randomPointOnHemisphereToPoint(Sphere sphere, vec3 source) {
     float u = randf();
     float v = randf();
 
@@ -457,6 +456,12 @@ vec3 randomPointOnSphere(Sphere sphere) {
         r * sin(phi),
         z
     );
+
+    vec3 targetDir = normalize(source - sphere.position);
+
+    if (dot(normal, targetDir) < 0) {
+        normal *= -1;
+    }
 
     vec3 lightPoint = sphere.position + sphere.radius * normal;
     return lightPoint;
@@ -475,6 +480,54 @@ vec3 randomPointOnTriangle(Triangle triangle) {
     return lightPoint;
 }
 
+vec3 getTransmittance(Ray ray, float maxDistance) {
+    vec3 Tr = vec3(1.0);
+    float tMax = maxDistance;
+
+    float tCurrent = 0.0;
+    Ray currentRay = ray;
+
+    for (int iter = 0; iter < 32; iter++) // safety loop
+    {
+        Hit hit = findClosestVolume(currentRay);
+
+        // no more volumes along ray
+        if (hit.didHit == HIT_MISS)
+            break;
+
+        float entry = hit.tNear;
+        float exit  = hit.tFar;
+
+        // convert to ray parameter space segment
+        float segStart = max(entry, tCurrent);
+        float segEnd   = min(exit, tMax);
+
+        // if segment is invalid or behind us
+        if (segEnd <= segStart)
+        {
+            // skip this volume entirely
+            currentRay.origin += (exit + 1e-6) * currentRay.dir;
+            tCurrent = exit;
+            continue;
+        }
+
+        float segmentLength = segEnd - segStart;
+
+        vec3 sigma_t = hit.volume.extinctionCoefficient;
+
+        Tr *= exp(-sigma_t * segmentLength);
+
+        // advance ray to end of this segment
+        currentRay.origin += (segEnd + 1e-6) * currentRay.dir;
+        tCurrent = segEnd;
+
+        if (tCurrent >= tMax)
+            break;
+    }
+
+    return Tr;
+}
+
 struct TraceData {
     Ray ray;
     vec3 incomingLight;
@@ -491,9 +544,8 @@ TraceData shadeSurface(Ray ray, vec3 incomingLight, vec3 rayColor, Hit hitSurfac
 
         // directly sampling light sources to estimate (brings down noise super fast)
         for (int i = 0; i < emissiveSpheresCount; i++) {
-            continue;
             Sphere sphere = emissiveSpheres[i];
-            vec3 lightPoint = randomPointOnSphere(sphere);
+            vec3 lightPoint = randomPointOnHemisphereToPoint(sphere, point);
             vec3 shadowDir = normalize(lightPoint - hitSurface.position);
             Ray shadowRay = Ray(hitSurface.position + 1e-6 * normal, shadowDir);
             if (isInShadow(shadowRay, length(lightPoint - hitSurface.position))) continue; // this light does not contribute anything
@@ -508,7 +560,7 @@ TraceData shadeSurface(Ray ray, vec3 incomingLight, vec3 rayColor, Hit hitSurfac
             float cos_surface = max(dot(normal, wi), 0.0);
             float cos_light = max(dot(lightNormal, -wi), 0.0);
 
-            float area = 4.0 * PI * sphere.radius * sphere.radius;
+            float area = 2.0 * PI * sphere.radius * sphere.radius; // 4pir^2 / 2 = 2pir^2 cuz only sampling hemisphere
 
             float p_light = dist2 / (area * cos_light + 1e-6);
             float p_bsdf = cos_surface / PI;
@@ -519,7 +571,13 @@ TraceData shadeSurface(Ray ray, vec3 incomingLight, vec3 rayColor, Hit hitSurfac
             vec3 Le = sphere.mat.emissionColor * sphere.mat.emissionStrength;
             vec3 f = mat.color / PI;
 
-            incomingLight += rayColor * Le * f * cos_surface / (p_light + 1e-6) * w;
+            // finally, get the transmittance along shadow ray if it exists and multiply to the contribution
+
+            vec3 transmittance = getTransmittance(shadowRay, length(lightPoint - point));
+
+            // transmittance = vec3(1);
+
+            incomingLight += rayColor * transmittance * Le * f * cos_surface / (p_light + 1e-6) * w;
         }
 
         ray.origin = hitSurface.position + 1e-6f * normal;
@@ -572,6 +630,13 @@ Ray scatter(Ray ray, float d, Hit hitVolume) {
     ray.dir = w; // this is new direction
 
     return ray;
+}
+
+float HenyeyGreensteinPhaseFunction(vec3 incomingLightDir, vec3 outgoingLightDir) {
+    float nominator = 1 - g * g;
+    float cos_theta = dot(incomingLightDir, outgoingLightDir);
+    float denominator = 4 * PI * pow(1 + g * g - 2 * g * cos_theta, 1.5);
+    return nominator / denominator;
 }
 
 vec3 traceRay(Ray ray) {
@@ -631,20 +696,57 @@ vec3 traceRay(Ray ray) {
             continue;
         }
 
-        // Light travels through volume completely. Now apply beer lambert law
-
-        rayColor *= exp(-volume.extinctionCoefficient * d);
+        // Light travels through volume completely
 
         // Leave medium
         bool leftMedium = entryT + d > exitT;
         if (leftMedium) {
             ray.origin += (hitVolume.tFar + 1e-6) * ray.dir;
+            rayColor *= exp(-volume.extinctionCoefficient * d); // beer's law
             continue;
         }
 
         // Medium interaction
         float pScatter = maxScatter / maxExtinction;
         if (randf() < pScatter) {
+            vec3 scatterPoint = ray.origin + d * ray.dir; // this should be renamed in the struct to hitPoint but whatever
+
+            // direct light sampling for homogeneous volumes
+            for (int i = 0; i < emissiveSpheresCount; i++) {
+                continue;
+                Sphere sphere = emissiveSpheres[i];
+                vec3 lightPoint = randomPointOnHemisphereToPoint(sphere, scatterPoint);
+                vec3 lightNormal = normalize(lightPoint - sphere.position);
+                vec3 wo = -ray.dir; // out going light direction
+                vec3 wi = normalize(lightPoint - scatterPoint); // direction from scatter point to light source
+                float dist = length(lightPoint - scatterPoint); // distance from scatter point to light source
+
+                // check for visibility
+                Ray shadowRay = Ray(scatterPoint, wi);
+
+                if (isInShadow(shadowRay, dist)) { // opaque object blocks light, this light source is not a direct light source
+                    continue;
+                }
+
+                // NOTE: this does NOT stack volumes. treats everything outside of current volume as vacuum, ie doesnt track any other homogenous volumes in the scene
+                HomogenousVolume volume = hitVolume.volume;
+
+                vec3 transmittance = getTransmittance(shadowRay, dist); // beer's law
+                
+                float phase = HenyeyGreensteinPhaseFunction(wi, wo);
+                float area = 2 * PI * sphere.radius * sphere.radius; // hemisphere area
+                float cosLight = max(dot(lightNormal, -wi), 0.0);
+
+                float pdf = dist*dist / (area * cosLight);
+                vec3 emittedLight = sphere.mat.emissionStrength * sphere.mat.emissionColor;
+
+                // this is the final direct light contribution
+                vec3 directLightSamplingContribution = transmittance * emittedLight * volume.scatteringCoefficient * phase / pdf;
+                incomingLight += rayColor * directLightSamplingContribution;
+            }
+
+            rayColor *= exp(-volume.extinctionCoefficient * d);
+
             ray = scatter(ray, d, hitVolume);
             continue;
         }
@@ -652,6 +754,12 @@ vec3 traceRay(Ray ray) {
         // Absorption
         break;
     }
+
+    // incomingLight = min(incomingLight, vec3(1)); // to clamp everything
+    // if (incomingLight.x > 1 || incomingLight.y > 1 || incomingLight.z > 1) {
+    //     float largest = max(max(incomingLight.x, incomingLight.y), incomingLight.z);
+    //     incomingLight /= largest;
+    // }
 
     return incomingLight;
 }
