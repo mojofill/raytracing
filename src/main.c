@@ -4,8 +4,8 @@
 #include "cglm/cglm.h"
 
 #define NUM_SAMPLES 1
-#define MAX_DEPTH 5
-#define ASYMMETRY_PARAMETER 0.98 // Henyey-Greenstein asymmetry parameter. Range: [-1, 1]
+#define MAX_DEPTH 600
+#define ASYMMETRY_PARAMETER 0.00 // Henyey-Greenstein asymmetry parameter. Range: [-1, 1]
 #define MAX_FRAMES_RAN 100
 #define STOP 0
 
@@ -314,7 +314,7 @@ void initializeSpheresCPU(vk_context *vko) {
                 .emissionColor = {1, 1, 1},
                 .emissionStrength = 0.00,
                 // .reflectivity = randf()
-                .reflectivity = 0.00
+                .reflectivity = 1.00
             }
         };
         glm_vec3_copy(vko->spheres[vko->sphereCount - 1].mat.color, vko->spheres[vko->sphereCount - 1].mat.emissionColor);
@@ -331,8 +331,8 @@ void initializeSpheresCPU(vk_context *vko) {
             .mat = (Material) {
                 .color = {1, 1, 1},
                 .emissionColor = {1, 1, 1},
-                .emissionStrength = 10.0,
-                .reflectivity = 0.00
+                .emissionStrength = 50.0,
+                .reflectivity = 1.00
             }
         };
     }
@@ -348,7 +348,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 1, 1},
             .emissionStrength = 0,
-            .reflectivity = 0.00
+            .reflectivity = 1.00
         }
     };
 
@@ -361,7 +361,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 1, 1},
             .emissionStrength = 0,
-            .reflectivity = 0.00
+            .reflectivity = 1.00
         }
     };
 
@@ -374,7 +374,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 0, 0},
             .emissionStrength = 0.0,
-            .reflectivity = 0.00
+            .reflectivity = 1.00
         }
     };
 
@@ -387,7 +387,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 0, 0},
             .emissionStrength = 0,
-            .reflectivity = 0.00
+            .reflectivity = 1.00
         }
     };
 
@@ -400,7 +400,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {0, 1, 0},
             .emissionStrength = 0.0,
-            .reflectivity = 0.00
+            .reflectivity = 1.00
         }
     };
 
@@ -413,7 +413,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {0, 1, 0},
             .emissionStrength = 0.0,
-            .reflectivity = 0.00
+            .reflectivity = 1.00
         }
     };
 
@@ -426,7 +426,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {0, 0, 0},
             .emissionStrength = 0.0,
-            .reflectivity = 0.00
+            .reflectivity = 1.00
         }
     };
 
@@ -439,7 +439,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {0, 0, 0},
             .emissionStrength = 0.0,
-            .reflectivity = 0.00
+            .reflectivity = 1.00
         }
     };
 
@@ -452,7 +452,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {0, 0, 0},
             .emissionStrength = 0.0,
-            .reflectivity = 0.00
+            .reflectivity = 1.00
         }
     };
 
@@ -465,7 +465,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {0, 0, 0},
             .emissionStrength = 0.0,
-            .reflectivity = 0.00
+            .reflectivity = 1.00
         }
     };
 
@@ -478,7 +478,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 1, 1},
             .emissionStrength = 0.00,
-            .reflectivity = 0.00
+            .reflectivity = 1.00
         }
     };
 
@@ -491,7 +491,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 1, 1},
             .emissionStrength = 0.00,
-            .reflectivity = 0.00
+            .reflectivity = 1.00
         }
     };
 
@@ -530,7 +530,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {1, 1, 1},
             .emissionColor = {1, 1, 1},
             .emissionStrength = 0.0,
-            .reflectivity = 0.00
+            .reflectivity = 1.00
         }
     };
 
@@ -543,7 +543,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {1, 1, 1},
             .emissionColor = {1, 1, 1},
             .emissionStrength = 0.0,
-            .reflectivity = 0.00
+            .reflectivity = 1.00
         }
     };
 }

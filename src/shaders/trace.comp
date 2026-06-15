@@ -249,7 +249,7 @@ Hit intersectTriangle(Ray ray, Triangle triangle) {
     float t = f * dot(edge2, q);
 
     if (t > 1e-6) { // intersection in front of ray
-        vec3 hitPoint = ray.origin + t * ray.dir;
+        vec3 hitPoint = ray.origin + (t - 1e-6) * ray.dir;
         vec3 normal = normalize(cross(edge1, edge2));
         if (dot(normal, ray.dir) > 0) {
             normal *= -1; // flip normal if facing wrong direction
@@ -280,7 +280,7 @@ Hit intersectHomogenousVolume(Ray ray, HomogenousVolume volume) {
         
         // IMPORTANT: setting normal to vec3(0) indicates to the trace function that the ray has hit a volume
 
-        return Hit(HIT_SUCCESS, t, tNear, tFar, hitPoint, vec3(0), VOLUME, createEmptyMaterial(), volume);
+        return Hit(HIT_SUCCESS, t, tNear - 1e-5, tFar + 1e-5, hitPoint, vec3(0), VOLUME, createEmptyMaterial(), volume);
     }
 
     Hit noHit = createEmptyHit();
@@ -639,6 +639,38 @@ float HenyeyGreensteinPhaseFunction(vec3 incomingLightDir, vec3 outgoingLightDir
     return nominator / denominator;
 }
 
+// FOR TESTING PURPOSES ONLY
+
+// Helper function to generate a random 0-1 float from a vec3
+float hash(vec3 p) {
+    p = fract(p * 0.1031);
+    p += dot(p, p.zyx + 31.32);
+    return fract((p.x + p.y) * p.z);
+}
+
+// 3D Noise function taking in vec3 and outputting 0 to 1 float
+float noise3(vec3 x) {
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    
+    // Smoothstep for cubic interpolation
+    vec3 u = f * f * (3.0 - 2.0 * f);
+
+    // 8 corners of the 3D grid cube
+    float a = hash(i + vec3(0.0, 0.0, 0.0));
+    float b = hash(i + vec3(1.0, 0.0, 0.0));
+    float c = hash(i + vec3(0.0, 1.0, 0.0));
+    float d = hash(i + vec3(1.0, 1.0, 0.0));
+    float e = hash(i + vec3(0.0, 0.0, 1.0));
+    float f_ = hash(i + vec3(1.0, 0.0, 1.0));
+    float g = hash(i + vec3(0.0, 1.0, 1.0));
+    float h = hash(i + vec3(1.0, 1.0, 1.0));
+
+    // Trilinear interpolation of the 8 corners
+    return mix(mix(mix(a, b, u.x), mix(c, d, u.x), u.y),
+               mix(mix(e, f_, u.x), mix(g, h, u.x), u.y), u.z);
+}
+
 vec3 traceRay(Ray ray) {
     vec3 incomingLight = vec3(0);
     vec3 rayColor = vec3(1);
@@ -655,9 +687,6 @@ vec3 traceRay(Ray ray) {
             break; // ray did not hit anything (hit the sky) can safely exit
         }
 
-        // find closest hit
-        Hit hit = createEmptyHit();
-
         // Surface first
         // either no volume was hit or it was hit but a surface was also hit and the surface was hit before the volume was
         if (hitVolume.didHit == HIT_MISS || (hitSurface.didHit == HIT_SUCCESS && hitSurface.t < hitVolume.t)) {
@@ -670,8 +699,8 @@ vec3 traceRay(Ray ray) {
         }
         
         // Volume first
-        float entryT = max(hitVolume.tNear, 0.0) + 1e-6;
-        float exitT = hitVolume.tFar - 1e-6;
+        float entryT = max(hitVolume.tNear, 0.0);
+        float exitT = hitVolume.tFar;
 
         float distanceInside = exitT - entryT;
 
@@ -683,6 +712,11 @@ vec3 traceRay(Ray ray) {
         }
 
         HomogenousVolume volume = hitVolume.volume;
+
+        // just testing:
+        vec3 oldScatteringCoefficient = volume.scatteringCoefficient;
+        volume.scatteringCoefficient = vec3(max(noise3(hitVolume.position), 0));
+        volume.extinctionCoefficient = volume.absorptionCoefficient + volume.scatteringCoefficient;
 
         float maxExtinction = max(max(volume.extinctionCoefficient.x, volume.extinctionCoefficient.y), volume.extinctionCoefficient.z);
         float maxScatter = max(max(volume.scatteringCoefficient.x, volume.scatteringCoefficient.y), volume.scatteringCoefficient.z);
@@ -702,7 +736,8 @@ vec3 traceRay(Ray ray) {
         bool leftMedium = entryT + d > exitT;
         if (leftMedium) {
             ray.origin += (hitVolume.tFar + 1e-6) * ray.dir;
-            rayColor *= exp(-volume.extinctionCoefficient * d); // beer's law
+            // distance inside is now exitT
+            rayColor *= exp(-volume.extinctionCoefficient * distanceInside); // beer's law
             continue;
         }
 
@@ -713,7 +748,6 @@ vec3 traceRay(Ray ray) {
 
             // direct light sampling for homogeneous volumes
             for (int i = 0; i < emissiveSpheresCount; i++) {
-                continue;
                 Sphere sphere = emissiveSpheres[i];
                 vec3 lightPoint = randomPointOnHemisphereToPoint(sphere, scatterPoint);
                 vec3 lightNormal = normalize(lightPoint - sphere.position);
@@ -745,7 +779,11 @@ vec3 traceRay(Ray ray) {
                 incomingLight += rayColor * directLightSamplingContribution;
             }
 
-            rayColor *= exp(-volume.extinctionCoefficient * d);
+            // now apply beer's law
+            rayColor *= exp(-volume.extinctionCoefficient * distanceInside);
+
+            volume.scatteringCoefficient = oldScatteringCoefficient;
+            volume.extinctionCoefficient = volume.absorptionCoefficient + volume.scatteringCoefficient;
 
             ray = scatter(ray, d, hitVolume);
             continue;
@@ -756,10 +794,10 @@ vec3 traceRay(Ray ray) {
     }
 
     // incomingLight = min(incomingLight, vec3(1)); // to clamp everything
-    // if (incomingLight.x > 1 || incomingLight.y > 1 || incomingLight.z > 1) {
-    //     float largest = max(max(incomingLight.x, incomingLight.y), incomingLight.z);
-    //     incomingLight /= largest;
-    // }
+    if (incomingLight.x > 1 || incomingLight.y > 1 || incomingLight.z > 1) {
+        float largest = max(max(incomingLight.x, incomingLight.y), incomingLight.z);
+        incomingLight /= largest;
+    }
 
     return incomingLight;
 }
