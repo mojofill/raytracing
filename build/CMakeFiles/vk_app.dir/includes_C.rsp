@@ -1,0 +1,1 @@
+-I"C:/Users/henry/Desktop/vulkan-projects/raytracing/src" -I"C:/Users/henry/Desktop/vulkan-projects/raytracing/src/cglm/include" -isystem C:/VulkanSDK/1.4.335.0/include -isystem "C:/glfw-mingw/include"

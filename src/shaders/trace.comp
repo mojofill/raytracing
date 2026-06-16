@@ -480,52 +480,112 @@ vec3 randomPointOnTriangle(Triangle triangle) {
     return lightPoint;
 }
 
-vec3 getTransmittance(Ray ray, float maxDistance) {
-    vec3 Tr = vec3(1.0);
-    float tMax = maxDistance;
+// FOR TESTING PURPOSES ONLY
 
-    float tCurrent = 0.0;
-    Ray currentRay = ray;
+// Helper function to generate a random 0-1 float from a vec3
+float hash(vec3 p) {
+    p = fract(p * 0.1031);
+    p += dot(p, p.zyx + 31.32);
+    return fract((p.x + p.y) * p.z);
+}
 
-    for (int iter = 0; iter < 32; iter++) // safety loop
-    {
-        Hit hit = findClosestVolume(currentRay);
+// 3D Noise function taking in vec3 and outputting 0 to 1 float
+float noise3(vec3 x) {
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    
+    // Smoothstep for cubic interpolation
+    vec3 u = f * f * (3.0 - 2.0 * f);
 
-        // no more volumes along ray
-        if (hit.didHit == HIT_MISS)
-            break;
+    // 8 corners of the 3D grid cube
+    float a = hash(i + vec3(0.0, 0.0, 0.0));
+    float b = hash(i + vec3(1.0, 0.0, 0.0));
+    float c = hash(i + vec3(0.0, 1.0, 0.0));
+    float d = hash(i + vec3(1.0, 1.0, 0.0));
+    float e = hash(i + vec3(0.0, 0.0, 1.0));
+    float f_ = hash(i + vec3(1.0, 0.0, 1.0));
+    float g = hash(i + vec3(0.0, 1.0, 1.0));
+    float h = hash(i + vec3(1.0, 1.0, 1.0));
 
-        float entry = hit.tNear;
-        float exit  = hit.tFar;
+    // Trilinear interpolation of the 8 corners
+    return mix(mix(mix(a, b, u.x), mix(c, d, u.x), u.y),
+               mix(mix(e, f_, u.x), mix(g, h, u.x), u.y), u.z);
+}
 
-        // convert to ray parameter space segment
-        float segStart = max(entry, tCurrent);
-        float segEnd   = min(exit, tMax);
+float fbm(vec3 p) {
+    float value = 0.0;
+    float amplitude = 0.5;
 
-        // if segment is invalid or behind us
-        if (segEnd <= segStart)
-        {
-            // skip this volume entirely
-            currentRay.origin += (exit + 1e-6) * currentRay.dir;
-            tCurrent = exit;
-            continue;
-        }
+    for (int i = 0; i < 6; i++) {
+        value += amplitude * noise3(p);
 
-        float segmentLength = segEnd - segStart;
-
-        vec3 sigma_t = hit.volume.extinctionCoefficient;
-
-        Tr *= exp(-sigma_t * segmentLength);
-
-        // advance ray to end of this segment
-        currentRay.origin += (segEnd + 1e-6) * currentRay.dir;
-        tCurrent = segEnd;
-
-        if (tCurrent >= tMax)
-            break;
+        p *= 2.02;
+        amplitude *= 0.5;
     }
 
-    return Tr;
+    return value;
+}
+
+float cloudDensity(vec3 p) {
+    // Large-scale cloud structure
+    float macro = fbm(p * 0.15);
+
+    // Domain warp
+    vec3 warp = vec3(
+        fbm(p * 0.25 + vec3(31,17,11)),
+        fbm(p * 0.25 + vec3(12,51,3)),
+        fbm(p * 0.25 + vec3(7,9,41))
+    );
+
+    warp = warp * 2.0 - 1.0;
+
+    // Fine detail
+    float detail = fbm((p + warp * 3.0) * 1.5);
+
+    float density = macro - 0.5 * detail;
+
+    // density = smoothstep(0.45, 0.8, density);
+    float coverage = 0.55; // higher = thicker clouds
+    // density = smoothstep(coverage, 1.0, density);
+    density = pow(density, 0.6);
+
+    return density;
+}
+
+// for now just assume one single volume
+vec3 getTransmittance(Ray ray, float maxDistance) {
+    vec3 transmittance = vec3(1.0);
+
+    Hit hit = findClosestVolume(ray);
+    if (hit.didHit == HIT_MISS) return transmittance;
+
+    HomogenousVolume volume = hit.volume;
+
+    float entryT = max(hit.tNear, 0);
+    float exitT = min(hit.tFar, maxDistance);
+
+    float travelledT = entryT;
+
+    vec3 majorantExtinctionCoefficient = volume.extinctionCoefficient;
+    float maxMajorantExtinctionComponent = max(max(majorantExtinctionCoefficient.x, majorantExtinctionCoefficient.y), majorantExtinctionCoefficient.z);
+
+    while (travelledT < exitT) { 
+        float sampledDistance = -log(randf()) / maxMajorantExtinctionComponent;
+        travelledT += sampledDistance;
+
+        if (travelledT >= exitT) {
+            break;
+        }
+
+        float density = cloudDensity(ray.origin + travelledT * ray.dir);
+        vec3 localExtinctionCoefficient = density * majorantExtinctionCoefficient;
+
+        vec3 acceptProbability = localExtinctionCoefficient / majorantExtinctionCoefficient;
+
+        transmittance *= (vec3(1.0) - acceptProbability);
+    }
+
+    return transmittance;
 }
 
 struct TraceData {
@@ -592,7 +652,7 @@ TraceData shadeSurface(Ray ray, vec3 incomingLight, vec3 rayColor, Hit hitSurfac
     return TraceData(ray, incomingLight, rayColor);
 }
 
-Ray scatter(Ray ray, float d, Hit hitVolume) {
+Ray scatter(Ray ray, vec3 scatterPoint) {
     // Henyey-Greenstein phase function gives cos(theta), where theta is the polar angle
     // of the new direction relative to the original ray origin + direction
     // Read here for more detail: https://zydak.github.io/Clouds/index.html
@@ -620,13 +680,7 @@ Ray scatter(Ray ray, float d, Hit hitVolume) {
     vec3 w = sin_theta * cos(phi) * t + sin_theta * sin(phi) * b + cos_theta * v;
     w = normalize(w); // just in case lmao
 
-    float entryT = max(hitVolume.tNear, 0);
-
-    // scatter ray at this position
-    float scatterT = entryT + d;
-
-    ray.origin += scatterT * ray.dir;
-    ray.origin += 1e-6 * w;
+    ray.origin = scatterPoint + 1e-6 * w;
     ray.dir = w; // this is new direction
 
     return ray;
@@ -637,38 +691,6 @@ float HenyeyGreensteinPhaseFunction(vec3 incomingLightDir, vec3 outgoingLightDir
     float cos_theta = dot(incomingLightDir, outgoingLightDir);
     float denominator = 4 * PI * pow(1 + g * g - 2 * g * cos_theta, 1.5);
     return nominator / denominator;
-}
-
-// FOR TESTING PURPOSES ONLY
-
-// Helper function to generate a random 0-1 float from a vec3
-float hash(vec3 p) {
-    p = fract(p * 0.1031);
-    p += dot(p, p.zyx + 31.32);
-    return fract((p.x + p.y) * p.z);
-}
-
-// 3D Noise function taking in vec3 and outputting 0 to 1 float
-float noise3(vec3 x) {
-    vec3 i = floor(x);
-    vec3 f = fract(x);
-    
-    // Smoothstep for cubic interpolation
-    vec3 u = f * f * (3.0 - 2.0 * f);
-
-    // 8 corners of the 3D grid cube
-    float a = hash(i + vec3(0.0, 0.0, 0.0));
-    float b = hash(i + vec3(1.0, 0.0, 0.0));
-    float c = hash(i + vec3(0.0, 1.0, 0.0));
-    float d = hash(i + vec3(1.0, 1.0, 0.0));
-    float e = hash(i + vec3(0.0, 0.0, 1.0));
-    float f_ = hash(i + vec3(1.0, 0.0, 1.0));
-    float g = hash(i + vec3(0.0, 1.0, 1.0));
-    float h = hash(i + vec3(1.0, 1.0, 1.0));
-
-    // Trilinear interpolation of the 8 corners
-    return mix(mix(mix(a, b, u.x), mix(c, d, u.x), u.y),
-               mix(mix(e, f_, u.x), mix(g, h, u.x), u.y), u.z);
 }
 
 vec3 traceRay(Ray ray) {
@@ -702,102 +724,124 @@ vec3 traceRay(Ray ray) {
         float entryT = max(hitVolume.tNear, 0.0);
         float exitT = hitVolume.tFar;
 
-        float distanceInside = exitT - entryT;
-
         bool surfaceInsideVolume = hitSurface.didHit == HIT_SUCCESS && hitSurface.t >= entryT && hitSurface.t <= exitT;
 
         if (surfaceInsideVolume) {
-            float surfaceDistanceInside = hitSurface.t - entryT;
-            distanceInside = min(distanceInside, surfaceDistanceInside);
+            exitT = hitSurface.t;
         }
 
         HomogenousVolume volume = hitVolume.volume;
 
-        // just testing:
-        vec3 oldScatteringCoefficient = volume.scatteringCoefficient;
-        volume.scatteringCoefficient = vec3(max(noise3(hitVolume.position), 0));
-        volume.extinctionCoefficient = volume.absorptionCoefficient + volume.scatteringCoefficient;
+        vec3 majorantExtinctionCoefficient = volume.extinctionCoefficient;
+        float maxMajorantExtinctionComponent = max(max(majorantExtinctionCoefficient.x, majorantExtinctionCoefficient.y), majorantExtinctionCoefficient.z);
 
-        float maxExtinction = max(max(volume.extinctionCoefficient.x, volume.extinctionCoefficient.y), volume.extinctionCoefficient.z);
-        float maxScatter = max(max(volume.scatteringCoefficient.x, volume.scatteringCoefficient.y), volume.scatteringCoefficient.z);
+        // delta tracking
+        float travelledT = entryT;
 
-        float d = -log(randf()) / maxExtinction;
+        bool absorbRay = false;
 
-        // Surface before scattering
-        if (surfaceInsideVolume && d >= distanceInside) {
-            TraceData data = shadeSurface(ray, incomingLight, rayColor, hitSurface);
-            ray = data.ray; incomingLight = data.incomingLight; rayColor = data.rayColor;
-            continue;
-        }
+        while (travelledT < exitT) {
+            float sampledDistance = -log(randf()) / maxMajorantExtinctionComponent; // standard closed form free path length for homogeneous volumes, using majorant coefficient
 
-        // Light travels through volume completely
+            travelledT += sampledDistance;
 
-        // Leave medium
-        bool leftMedium = entryT + d > exitT;
-        if (leftMedium) {
-            ray.origin += (hitVolume.tFar + 1e-6) * ray.dir;
-            // distance inside is now exitT
-            rayColor *= exp(-volume.extinctionCoefficient * distanceInside); // beer's law
-            continue;
-        }
+            // Surface before scattering
+            if (travelledT >= exitT) {
+                if (surfaceInsideVolume) {
+                    TraceData data = shadeSurface(ray, incomingLight, rayColor, hitSurface);
+                    ray = data.ray;
+                    incomingLight = data.incomingLight;
+                    rayColor = data.rayColor;
+                    break;
+                }
+                else { // ray left medium
+                    ray.origin += (hitVolume.tFar + 1e-6) * ray.dir;
+                    // no beer's law now, at least thats just according to chatgpt
+                    break;
+                }
+            }
+            else {
+                float density = cloudDensity(ray.origin + travelledT * ray.dir);
 
-        // Medium interaction
-        float pScatter = maxScatter / maxExtinction;
-        if (randf() < pScatter) {
-            vec3 scatterPoint = ray.origin + d * ray.dir; // this should be renamed in the struct to hitPoint but whatever
+                vec3 localScatteringCoefficient = density * volume.scatteringCoefficient;
+                vec3 localAbsorptionCoefficient = density * volume.absorptionCoefficient;
+                vec3 localExtinctionCoefficient = localScatteringCoefficient + localAbsorptionCoefficient;
 
-            // direct light sampling for homogeneous volumes
-            for (int i = 0; i < emissiveSpheresCount; i++) {
-                Sphere sphere = emissiveSpheres[i];
-                vec3 lightPoint = randomPointOnHemisphereToPoint(sphere, scatterPoint);
-                vec3 lightNormal = normalize(lightPoint - sphere.position);
-                vec3 wo = -ray.dir; // out going light direction
-                vec3 wi = normalize(lightPoint - scatterPoint); // direction from scatter point to light source
-                float dist = length(lightPoint - scatterPoint); // distance from scatter point to light source
+                float maxLocalExtinctionComponent = max(max(localExtinctionCoefficient.x, localExtinctionCoefficient.y), localExtinctionCoefficient.z);
 
-                // check for visibility
-                Ray shadowRay = Ray(scatterPoint, wi);
+                float acceptanceProbability = maxLocalExtinctionComponent / maxMajorantExtinctionComponent;
 
-                if (isInShadow(shadowRay, dist)) { // opaque object blocks light, this light source is not a direct light source
-                    continue;
+                if (randf() > acceptanceProbability) {
+                    continue; // null collision, keep sampling
                 }
 
-                // NOTE: this does NOT stack volumes. treats everything outside of current volume as vacuum, ie doesnt track any other homogenous volumes in the scene
-                HomogenousVolume volume = hitVolume.volume;
+                // simulate real interaction
+                float maxLocalScatteringCoefficient = max(max(localScatteringCoefficient.x, localScatteringCoefficient.y), localScatteringCoefficient.z);
 
-                vec3 transmittance = getTransmittance(shadowRay, dist); // beer's law
-                
-                float phase = HenyeyGreensteinPhaseFunction(wi, wo);
-                float area = 2 * PI * sphere.radius * sphere.radius; // hemisphere area
-                float cosLight = max(dot(lightNormal, -wi), 0.0);
+                float scatterProbability = maxLocalScatteringCoefficient / maxLocalExtinctionComponent;
 
-                float pdf = dist*dist / (area * cosLight);
-                vec3 emittedLight = sphere.mat.emissionStrength * sphere.mat.emissionColor;
+                if (randf() < scatterProbability) {
+                    // scatter
+                    vec3 scatterPoint = ray.origin + travelledT * ray.dir; // this should be renamed in the struct to hitPoint but whatever
 
-                // this is the final direct light contribution
-                vec3 directLightSamplingContribution = transmittance * emittedLight * volume.scatteringCoefficient * phase / pdf;
-                incomingLight += rayColor * directLightSamplingContribution;
+                    vec3 localAlbedo = localScatteringCoefficient / (localExtinctionCoefficient + vec3(1e-6));
+                    rayColor *= localAlbedo / (scatterProbability + 1e-6);
+
+                    // direct light sampling for homogeneous volumes
+                    for (int i = 0; i < emissiveSpheresCount; i++) {
+                        Sphere sphere = emissiveSpheres[i];
+                        vec3 lightPoint = randomPointOnHemisphereToPoint(sphere, scatterPoint);
+                        vec3 lightNormal = normalize(lightPoint - sphere.position);
+                        vec3 wo = -ray.dir; // out going light direction
+                        vec3 wi = normalize(lightPoint - scatterPoint); // direction from scatter point to light source
+                        float dist = length(lightPoint - scatterPoint); // distance from scatter point to light source
+
+                        // check for visibility
+                        Ray shadowRay = Ray(scatterPoint, wi);
+
+                        if (isInShadow(shadowRay, dist)) { // opaque object blocks light, this light source is not a direct light source
+                            continue;
+                        }
+
+                        // NOTE: this does NOT stack volumes. treats everything outside of current volume as vacuum, ie doesnt track any other homogenous volumes in the scene
+                        HomogenousVolume volume = hitVolume.volume;
+
+                        vec3 transmittance = getTransmittance(shadowRay, dist);
+                        
+                        float phase = HenyeyGreensteinPhaseFunction(wi, wo);
+                        float area = 2 * PI * sphere.radius * sphere.radius; // hemisphere area
+                        float cosLight = max(dot(lightNormal, -wi), 0.0);
+
+                        float pdf = dist*dist / (area * cosLight);
+                        vec3 emittedLight = sphere.mat.emissionStrength * sphere.mat.emissionColor;
+
+                        // this is the final direct light contribution
+                        vec3 directLightSamplingContribution = transmittance * emittedLight * localScatteringCoefficient * phase / pdf;
+                        incomingLight += rayColor * directLightSamplingContribution;
+                    }
+
+                    // no beer's law
+
+                    ray = scatter(ray, scatterPoint);
+                }
+                else {
+                    // absorb
+                    absorbRay = true;
+                }
+
+                break; // no more sampling after found real interaction
             }
-
-            // now apply beer's law
-            rayColor *= exp(-volume.extinctionCoefficient * distanceInside);
-
-            volume.scatteringCoefficient = oldScatteringCoefficient;
-            volume.extinctionCoefficient = volume.absorptionCoefficient + volume.scatteringCoefficient;
-
-            ray = scatter(ray, d, hitVolume);
-            continue;
         }
 
-        // Absorption
-        break;
+        if (absorbRay) break;
     }
 
-    // incomingLight = min(incomingLight, vec3(1)); // to clamp everything
-    if (incomingLight.x > 1 || incomingLight.y > 1 || incomingLight.z > 1) {
-        float largest = max(max(incomingLight.x, incomingLight.y), incomingLight.z);
-        incomingLight /= largest;
-    }
+    // this is a quick hack for disabling fireflies, at the expense of making things less bright in general
+
+    // if (incomingLight.x > 1 || incomingLight.y > 1 || incomingLight.z > 1) {
+    //     float largest = max(max(incomingLight.x, incomingLight.y), incomingLight.z);
+    //     incomingLight /= largest;
+    // }
 
     return incomingLight;
 }

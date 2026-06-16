@@ -4,8 +4,8 @@
 #include "cglm/cglm.h"
 
 #define NUM_SAMPLES 1
-#define MAX_DEPTH 600
-#define ASYMMETRY_PARAMETER 0.00 // Henyey-Greenstein asymmetry parameter. Range: [-1, 1]
+#define MAX_DEPTH 50
+#define ASYMMETRY_PARAMETER 0.80 // Henyey-Greenstein asymmetry parameter. Range: [-1, 1]
 #define MAX_FRAMES_RAN 100
 #define STOP 0
 
@@ -91,7 +91,7 @@ void resetStorageImage(vk_context *vko) {
 void updateCamera(vk_context *vko) {
     Camera *camera = &vko->cam;
     int didMove = 0;
-    float speed = 0.25f;
+    float speed = 5.25f;
     float sensitivity = 0.002f;
 
     double xpos;
@@ -289,7 +289,7 @@ void lookat(vk_context *vko, vec3 target) {
 
 void initializeCamera(vk_context *vko) {
     vko->cam = (Camera) {
-        .position = { 0, -9, 10 },
+        .position = { 20, 0, 50 },
         .forward = { 0, 1, 0 },
         .right = { 1, 0, 0 },
         .up = { 0, 0, 1 }
@@ -314,7 +314,7 @@ void initializeSpheresCPU(vk_context *vko) {
                 .emissionColor = {1, 1, 1},
                 .emissionStrength = 0.00,
                 // .reflectivity = randf()
-                .reflectivity = 1.00
+                .reflectivity = 0.00
             }
         };
         glm_vec3_copy(vko->spheres[vko->sphereCount - 1].mat.color, vko->spheres[vko->sphereCount - 1].mat.emissionColor);
@@ -324,15 +324,15 @@ void initializeSpheresCPU(vk_context *vko) {
         vko->emissiveSpheres[vko->emissiveSpheresCount++] = (Sphere) {
             // .position = {-100, 0, 120},
             // .radius = 40,
-            .position = {21, 0, 4},
-            .radius = 10,
+            .position = {150, 0, 50},
+            .radius = 60,
             // .position = {5 * (2 * randf() - 1), 5 * (2 * randf() - 1), 0.5},
             // .radius = 0.15 * randf() + 0.10,
             .mat = (Material) {
                 .color = {1, 1, 1},
                 .emissionColor = {1, 1, 1},
-                .emissionStrength = 50.0,
-                .reflectivity = 1.00
+                .emissionStrength = 1.0,
+                .reflectivity = 0.00
             }
         };
     }
@@ -348,7 +348,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 1, 1},
             .emissionStrength = 0,
-            .reflectivity = 1.00
+            .reflectivity = 0.00
         }
     };
 
@@ -361,7 +361,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 1, 1},
             .emissionStrength = 0,
-            .reflectivity = 1.00
+            .reflectivity = 0.00
         }
     };
 
@@ -374,7 +374,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 0, 0},
             .emissionStrength = 0.0,
-            .reflectivity = 1.00
+            .reflectivity = 0.00
         }
     };
 
@@ -387,7 +387,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 0, 0},
             .emissionStrength = 0,
-            .reflectivity = 1.00
+            .reflectivity = 0.00
         }
     };
 
@@ -400,7 +400,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {0, 1, 0},
             .emissionStrength = 0.0,
-            .reflectivity = 1.00
+            .reflectivity = 0.00
         }
     };
 
@@ -413,7 +413,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {0, 1, 0},
             .emissionStrength = 0.0,
-            .reflectivity = 1.00
+            .reflectivity = 0.00
         }
     };
 
@@ -426,7 +426,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {0, 0, 0},
             .emissionStrength = 0.0,
-            .reflectivity = 1.00
+            .reflectivity = 0.00
         }
     };
 
@@ -439,7 +439,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {0, 0, 0},
             .emissionStrength = 0.0,
-            .reflectivity = 1.00
+            .reflectivity = 0.00
         }
     };
 
@@ -452,7 +452,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {0, 0, 0},
             .emissionStrength = 0.0,
-            .reflectivity = 1.00
+            .reflectivity = 0.00
         }
     };
 
@@ -465,7 +465,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {0, 0, 0},
             .emissionStrength = 0.0,
-            .reflectivity = 1.00
+            .reflectivity = 0.00
         }
     };
 
@@ -478,7 +478,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 1, 1},
             .emissionStrength = 0.00,
-            .reflectivity = 1.00
+            .reflectivity = 0.00
         }
     };
 
@@ -491,7 +491,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {0.5, 0.5, 0.5},
             .emissionColor = {1, 1, 1},
             .emissionStrength = 0.00,
-            .reflectivity = 1.00
+            .reflectivity = 0.00
         }
     };
 
@@ -530,7 +530,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {1, 1, 1},
             .emissionColor = {1, 1, 1},
             .emissionStrength = 0.0,
-            .reflectivity = 1.00
+            .reflectivity = 0.00
         }
     };
 
@@ -543,7 +543,7 @@ void initializeTrianglesCPU(vk_context *vko) {
             .color = {1, 1, 1},
             .emissionColor = {1, 1, 1},
             .emissionStrength = 0.0,
-            .reflectivity = 1.00
+            .reflectivity = 0.00
         }
     };
 }
@@ -557,8 +557,11 @@ void initializeHomogenousVolumesCPU(vk_context *vko) {
         .absorptionCoefficient = {absorptionCoefficient[0], absorptionCoefficient[1], absorptionCoefficient[2]},
         .scatteringCoefficient = {scatteringCoefficient[0], scatteringCoefficient[1], scatteringCoefficient[2]},
         .extinctionCoefficient = {extinctionCoefficient[0], extinctionCoefficient[1], extinctionCoefficient[2]},
-        .minXYZ = {-5.999, -5.999, 0.001}, // bounding box
-        .maxXYZ = {5.999, 5.999, 5.999}
+        // .minXYZ = {-5.999, -5.999, 0.001}, // bounding box
+        // .maxXYZ = {5.999, 5.999, 5.999}
+        
+        .minXYZ = {-35.999, -59.999, -5.001}, // bounding box
+        .maxXYZ = {10.999, 10.999, 25.999}
     };
 }
 
