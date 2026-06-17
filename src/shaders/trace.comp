@@ -117,6 +117,7 @@ layout (std430, binding = 5) buffer EmissiveSpheresBuffer {
 layout (std430, binding = 6) buffer EmissiveTrianglesBuffer {
     Triangle emissiveTriangles[];
 };
+layout (binding = 7) uniform sampler3D densityTexture;
 
 uint state = uint(frameCount * 100);
 
@@ -280,7 +281,7 @@ Hit intersectHomogenousVolume(Ray ray, HomogenousVolume volume) {
         
         // IMPORTANT: setting normal to vec3(0) indicates to the trace function that the ray has hit a volume
 
-        return Hit(HIT_SUCCESS, t, tNear - 1e-5, tFar + 1e-5, hitPoint, vec3(0), VOLUME, createEmptyMaterial(), volume);
+        return Hit(HIT_SUCCESS, t, tNear - 1e-3, tFar + 1e-3, hitPoint, vec3(0), VOLUME, createEmptyMaterial(), volume);
     }
 
     Hit noHit = createEmptyHit();
@@ -526,7 +527,10 @@ float fbm(vec3 p) {
     return value;
 }
 
-float cloudDensity(vec3 p) {
+float cloudDensity(vec3 p, HomogenousVolume volume) {
+    vec3 normalized = p - volume.minXYZ;
+    normalized /= volume.maxXYZ - volume.minXYZ;
+    return texture(densityTexture, normalized).r;
     // Large-scale cloud structure
     float macro = fbm(p * 0.05);
 
@@ -578,7 +582,7 @@ vec3 getTransmittance(Ray ray, HomogenousVolume volume, float maxDistance) {
             break;
         }
 
-        float density = cloudDensity(ray.origin + travelledT * ray.dir);
+        float density = cloudDensity(ray.origin + travelledT * ray.dir, volume);
         vec3 localExtinctionCoefficient = density * majorantExtinctionCoefficient;
 
         vec3 acceptProbability = localExtinctionCoefficient / majorantExtinctionCoefficient;
@@ -764,7 +768,7 @@ vec3 traceRay(Ray ray) {
                 }
             }
             else {
-                float density = cloudDensity(ray.origin + travelledT * ray.dir);
+                float density = cloudDensity(ray.origin + travelledT * ray.dir, volume);
 
                 vec3 localScatteringCoefficient = density * volume.scatteringCoefficient;
                 vec3 localAbsorptionCoefficient = density * volume.absorptionCoefficient;

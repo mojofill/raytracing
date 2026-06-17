@@ -51,12 +51,20 @@ void createDescriptorSetLayout(vk_context *vko) {
     emissiveTrianglesBufferLayoutBinding.descriptorCount = 1;
     emissiveTrianglesBufferLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-    VkDescriptorSetLayoutBinding bindings[7] = { uboLayoutBinding, imageLayoutBinding, sphereBufferLayoutBinding, triangleBufferLayoutBinding, homogenousVolumesBufferLayoutBinding, emissiveSpheresBufferLayoutBinding, emissiveTrianglesBufferLayoutBinding };
+    // density sampler
+    VkDescriptorSetLayoutBinding samplerLayoutBinding = {0};
+    samplerLayoutBinding.binding = 7;
+    samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    samplerLayoutBinding.descriptorCount = 1;
+    samplerLayoutBinding.pImmutableSamplers = &vko->densityTextureSampler; // might need to put this back to NULL
+    samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    VkDescriptorSetLayoutBinding bindings[8] = { uboLayoutBinding, imageLayoutBinding, sphereBufferLayoutBinding, triangleBufferLayoutBinding, homogenousVolumesBufferLayoutBinding, emissiveSpheresBufferLayoutBinding, emissiveTrianglesBufferLayoutBinding, samplerLayoutBinding };
 
     VkDescriptorSetLayoutCreateInfo layoutInfo = {0};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutInfo.pBindings = bindings;
-    layoutInfo.bindingCount = 7;
+    layoutInfo.bindingCount = 8;
 
     if (vkCreateDescriptorSetLayout(vko->device, &layoutInfo, NULL, &vko->descriptorSetLayout) != VK_SUCCESS) {
         printf("Failed to create descriptor set layout\n");
@@ -75,7 +83,7 @@ void createUniformBuffer(vk_context *vko) {
 }
 
 void createDescriptorPool(vk_context *vko) {
-    VkDescriptorPoolSize poolSizes[7]; // adjust for however many uniforms you want
+    VkDescriptorPoolSize poolSizes[8]; // adjust for however many uniforms you want
     // only one singular uniform buffer object needs to be allocated
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = (uint32_t) MAX_FRAMES_IN_FLIGHT;
@@ -98,9 +106,12 @@ void createDescriptorPool(vk_context *vko) {
     poolSizes[6].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     poolSizes[6].descriptorCount = (uint32_t) MAX_FRAMES_IN_FLIGHT;
 
+    poolSizes[7].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[7].descriptorCount = (uint32_t) MAX_FRAMES_IN_FLIGHT;
+
     VkDescriptorPoolCreateInfo poolInfo = {0};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = 7;
+    poolInfo.poolSizeCount = 8;
     poolInfo.pPoolSizes = poolSizes;
     poolInfo.maxSets = (uint32_t) MAX_FRAMES_IN_FLIGHT;
 
@@ -165,8 +176,13 @@ void createDescriptorSets(vk_context *vko) {
         emissiveTrianglesBufferInfo.offset = 0;
         emissiveTrianglesBufferInfo.range = vko->emissiveTrianglesCount * sizeof(Triangle);
 
+        VkDescriptorImageInfo densityImageInfo = {0};
+        densityImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        densityImageInfo.imageView = vko->densityTextureImageView;
+        densityImageInfo.sampler = vko->densityTextureSampler;
+
         // write to descriptor set
-        VkWriteDescriptorSet descriptorWrites[7] = {0}; // can add more descriptor sets if necessary
+        VkWriteDescriptorSet descriptorWrites[8] = {0}; // can add more descriptor sets if necessary
         // such as samplers or storage buffers
 
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -225,6 +241,15 @@ void createDescriptorSets(vk_context *vko) {
         descriptorWrites[6].descriptorCount = 1;
         descriptorWrites[6].pBufferInfo = &emissiveTrianglesBufferInfo;
 
-        vkUpdateDescriptorSets(vko->device, 7, descriptorWrites, 0, NULL);
+        // sampler
+        descriptorWrites[7].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[7].dstSet = vko->descriptorSets[i];
+        descriptorWrites[7].dstBinding = 7;
+        descriptorWrites[7].dstArrayElement = 0;
+        descriptorWrites[7].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[7].descriptorCount = 1;
+        descriptorWrites[7].pImageInfo = &densityImageInfo;
+
+        vkUpdateDescriptorSets(vko->device, 8, descriptorWrites, 0, NULL);
     }
 }

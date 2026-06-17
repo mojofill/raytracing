@@ -1,44 +1,47 @@
 #include "image.h"
 
-void createImage(vk_context *vko, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage *image, VkDeviceMemory *imageMemory) {
+void createImage(vk_context *vko, uint32_t width, uint32_t height, uint32_t depth, VkImageType imageType, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImageLayout finalLayout, VkImage *pImage, VkDeviceMemory *pImageMemory) {
     VkImageCreateInfo imageInfo = {0};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.extent.width = (uint32_t) width;
-    imageInfo.extent.height = (uint32_t) height;
-    imageInfo.extent.depth = 1; // 2d image thus just one z depth layer
+    imageInfo.pNext = NULL;
+    imageInfo.imageType = imageType;
+    imageInfo.extent.width = width;
+    imageInfo.extent.height = height;
+    imageInfo.extent.depth = depth;
     imageInfo.mipLevels = 1;
     imageInfo.arrayLayers = 1;
     imageInfo.format = format;
-    imageInfo.tiling = tiling; // if u want access, then put VK_IMAGE_TILING_LINEAR - will be slower
-    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED; // since we are using staging buffer not staging image, can leave layout undefined
-    imageInfo.usage = usage; // dst = destination during transfer, sampled bit = will be sampled by shader
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.tiling = tiling;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageInfo.usage = usage;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT; // only relevant for attachments (ie swapchain -> framebuffer -> render pass attachments, not relevant for texture images)
 
-    if (vkCreateImage(vko->device, &imageInfo, NULL, image) != VK_SUCCESS) {
-        fprintf(stderr, "Failed to create image\n");
+    if (vkCreateImage(vko->device, &imageInfo, NULL, pImage) != VK_SUCCESS) {
+        printf("failed to create 3D image\n");
         exit(1);
     }
 
     // allocate space for image
     VkMemoryRequirements memRequirements;
-    vkGetImageMemoryRequirements(vko->device, *image, &memRequirements);
+    vkGetImageMemoryRequirements(vko->device, *pImage, &memRequirements);
 
     VkMemoryAllocateInfo allocInfo = {0};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memRequirements.size;
     allocInfo.memoryTypeIndex = findMemoryType(vko, memRequirements.memoryTypeBits, properties);
 
-    if (vkAllocateMemory(vko->device, &allocInfo, NULL, imageMemory) != VK_SUCCESS) {
+    if (vkAllocateMemory(vko->device, &allocInfo, NULL, pImageMemory) != VK_SUCCESS) {
         fprintf(stderr, "Failed to allocate memory for texture image\n");
         exit(1);
     }
 
-    vkBindImageMemory(vko->device, *image, *imageMemory, 0);
+    vkBindImageMemory(vko->device, *pImage, *pImageMemory, 0);
 
-    // now must transition image layout to general
-    transitionImageLayout(vko, vko->storageImage, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+    // now must transition image layout to transfer dst optimal (cuz staging image --> this 3d texture image)
+    // for storage images, final layout has to be general
+    // specifically for the density 3d image, final layout has to be transfer dst optimal
+    transitionImageLayout(vko, *pImage, format, VK_IMAGE_LAYOUT_UNDEFINED, finalLayout);
 }
 
 // must transition image layout to be suitable for gpu device memory manipulation
@@ -77,7 +80,7 @@ void transitionImageLayout(vk_context *vko, VkImage image, VkFormat format, VkIm
         barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
         sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT; // fragment shader will need this so wait til then
+        destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT; // fragment shader will need this so wait til then
     }
     // this is for compute shaders
     else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_GENERAL) {
@@ -118,11 +121,33 @@ void transitionImageLayout(vk_context *vko, VkImage image, VkFormat format, VkIm
     endSingleTimeCommands(vko, commandBuffer);
 }
 
-void createImageView(vk_context *vko, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, VkImageView *imageView) {
+void createImageView(vk_context *vko, VkImage image, VkImageViewType imageViewType, VkFormat format, VkImageAspectFlags aspectFlags, VkImageView *imageView) {
     VkImageViewCreateInfo viewInfo = {0};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = image;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.viewType = imageViewType;
+    viewInfo.format = format;
+    viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY; // rgba -> rgba. pure identity, no alteration
+    viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.subresourceRange.aspectMask = aspectFlags;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+
+    if (vkCreateImageView(vko->device, &viewInfo, NULL, imageView) != VK_SUCCESS) {
+        fprintf(stderr, "Failed to create image view\n");
+        exit(1);
+    }
+}
+
+void create3DImageView(vk_context *vko, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, VkImageView *imageView) {
+    VkImageViewCreateInfo viewInfo = {0};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
     viewInfo.format = format;
     viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY; // rgba -> rgba. pure identity, no alteration
     viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;

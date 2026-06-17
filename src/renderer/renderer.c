@@ -400,6 +400,97 @@ void initializeBufferGPU(vk_context *vko, void *src, VkBuffer *pDstBuffer, VkDev
     vkFreeMemory(vko->device, stagingMemory, NULL);
 }
 
+void initializeImageDataGPU(vk_context *vko) {
+    // Upload density[] into your staging buffer and copy into
+    // densityTextureImage with vkCmdCopyBufferToImage()
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+
+    VkDeviceSize imageSize =
+        sizeof(float) *
+        vko->volumeWidth *
+        vko->volumeHeight *
+        vko->volumeDepth;
+
+    createBuffer(
+        vko,
+        imageSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &stagingBuffer,
+        &stagingBufferMemory
+    );
+
+    void *mapped;
+    vkMapMemory(
+        vko->device,
+        stagingBufferMemory,
+        0,
+        imageSize,
+        0,
+        &mapped
+    );
+
+    memcpy(mapped, vko->density, imageSize);
+
+    vkUnmapMemory(vko->device, stagingBufferMemory);
+
+    transitionImageLayout(
+        vko,
+        vko->densityTextureImage,
+        VK_FORMAT_R32_SFLOAT,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+    );
+
+    VkBufferImageCopy region = {0};
+
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+
+    region.imageOffset = (VkOffset3D){0,0,0};
+
+    region.imageExtent = (VkExtent3D){
+        .width  = vko->volumeWidth,
+        .height = vko->volumeHeight,
+        .depth  = vko->volumeDepth
+    };
+
+    VkCommandBuffer cmd = beginSingleTimeCommands(vko);
+
+    vkCmdCopyBufferToImage(
+        cmd,
+        stagingBuffer,
+        vko->densityTextureImage,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1,
+        &region
+    );
+
+    endSingleTimeCommands(vko, cmd);
+
+    transitionImageLayout(
+        vko,
+        vko->densityTextureImage,
+        VK_FORMAT_R32_SFLOAT,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    );
+
+    vkDestroyBuffer(vko->device, stagingBuffer, NULL);
+    vkFreeMemory(vko->device, stagingBufferMemory, NULL);
+
+    free(vko->density);
+}
+
 static void initVulkan(vk_context *vko) {
     vko->framebufferResized = 0; // initialize framebuffer resizing flag to 0 (off)
     createInstance(vko);
@@ -415,19 +506,44 @@ static void initVulkan(vk_context *vko) {
         vko,
         vko->width,
         vko->height,
+        1,
+        VK_IMAGE_TYPE_2D,
         VK_FORMAT_R32G32B32A32_SFLOAT,
         VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, // transfer for clearing
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        &vko->storageImage, &vko->storageImageMemory
+        VK_IMAGE_LAYOUT_GENERAL,
+        &vko->storageImage,
+        &vko->storageImageMemory
     );
-    createImageView(vko, vko->storageImage, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT, &vko->storageImageView);
+    createImageView(vko, vko->storageImage, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT, &vko->storageImageView);
     createSampler(vko, &vko->storageSampler);
     initializeBufferGPU(vko, vko->spheres, &vko->sphereBuffer, &vko->sphereMemory, vko->sphereCount * sizeof(Sphere));
     initializeBufferGPU(vko, vko->triangles, &vko->triangleBuffer, &vko->triangleMemory, vko->triangleCount * sizeof(Triangle));
     initializeBufferGPU(vko, vko->homogenousVolumes, &vko->homogenousVolumesBuffer, &vko->homogenousVolumesMemory, vko->homogenousVolumesCount * sizeof(HomogenousVolume));
     initializeBufferGPU(vko, vko->emissiveSpheres, &vko->emissiveSpheresBuffer, &vko->emissiveSpheresMemory, vko->emissiveSpheresCount * sizeof(Sphere));
     initializeBufferGPU(vko, vko->emissiveTriangles, &vko->emissiveTrianglesBuffer, &vko->emissiveTrianglesMemory, vko->emissiveTrianglesCount * sizeof(Triangle));
+
+    // creating density 3d texture image. this is only temporary, will use nano vdb in the future
+    createImage(
+        vko,
+        vko->volumeWidth,
+        vko->volumeHeight,
+        vko->volumeDepth,
+        VK_IMAGE_TYPE_3D,
+        VK_FORMAT_R32_SFLOAT, // shit this thing doesnt support sfloats??
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        &vko->densityTextureImage,
+        &vko->densityTextureMemory
+    );
+    createImageView(vko, vko->densityTextureImage, VK_IMAGE_VIEW_TYPE_3D, VK_FORMAT_R32_SFLOAT, VK_IMAGE_ASPECT_COLOR_BIT, &vko->densityTextureImageView);
+    createSampler(vko, &vko->densityTextureSampler);
+
+    initializeImageDataGPU(vko);
+
     createDescriptorSetLayout(vko);
     createDescriptorPool(vko);
     createDescriptorSets(vko);
@@ -468,6 +584,10 @@ void cleanupRenderer(vk_context *vko) {
     vkDestroyImageView(vko->device, vko->storageImageView, NULL);
     vkDestroyImage(vko->device, vko->storageImage, NULL);
     vkFreeMemory(vko->device, vko->storageImageMemory, NULL);
+    vkDestroyImage(vko->device, vko->densityTextureImage, NULL);
+    vkFreeMemory(vko->device, vko->densityTextureMemory, NULL);
+    vkDestroySampler(vko->device, vko->densityTextureSampler, NULL);
+    vkDestroyImageView(vko->device, vko->densityTextureImageView, NULL);
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroyBuffer(vko->device, vko->uniformBuffers[i], NULL);
         vkFreeMemory(vko->device, vko->uniformBufferMemories[i], NULL);

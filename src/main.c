@@ -4,7 +4,7 @@
 #include "cglm/cglm.h"
 
 #define NUM_SAMPLES 1
-#define MAX_DEPTH 3
+#define MAX_DEPTH 20
 #define ASYMMETRY_PARAMETER 0.80 // Henyey-Greenstein asymmetry parameter. Range: [-1, 1]
 #define MAX_FRAMES_RAN 100
 #define STOP 0
@@ -289,7 +289,7 @@ void lookat(vk_context *vko, vec3 target) {
 
 void initializeCamera(vk_context *vko) {
     vko->cam = (Camera) {
-        .position = { 20, 0, 50 },
+        .position = { 20, -500, 50 },
         .forward = { 0, 1, 0 },
         .right = { 1, 0, 0 },
         .up = { 0, 0, 1 }
@@ -324,8 +324,8 @@ void initializeSpheresCPU(vk_context *vko) {
         vko->emissiveSpheres[vko->emissiveSpheresCount++] = (Sphere) {
             // .position = {-100, 0, 120},
             // .radius = 40,
-            .position = {150, 0, 100},
-            .radius = 60,
+            .position = {00, -750, 100},
+            .radius = 150,
             // .position = {5 * (2 * randf() - 1), 5 * (2 * randf() - 1), 0.5},
             // .radius = 0.15 * randf() + 0.10,
             .mat = (Material) {
@@ -557,12 +557,193 @@ void initializeHomogenousVolumesCPU(vk_context *vko) {
         .absorptionCoefficient = {absorptionCoefficient[0], absorptionCoefficient[1], absorptionCoefficient[2]},
         .scatteringCoefficient = {scatteringCoefficient[0], scatteringCoefficient[1], scatteringCoefficient[2]},
         .extinctionCoefficient = {extinctionCoefficient[0], extinctionCoefficient[1], extinctionCoefficient[2]},
-        // .minXYZ = {-5.999, -5.999, 0.001}, // bounding box
-        // .maxXYZ = {5.999, 5.999, 5.999}
-        
-        .minXYZ = {-205.999, -180.999, -45.001}, // bounding box
-        .maxXYZ = {0.999, 220.999, 45.999}
+        .minXYZ = {-480, -240, -240},
+        .maxXYZ = { 480,  240,  240}
     };
+
+    // for testing purposes:
+    vko->volumeWidth = (int) (vko->homogenousVolumes[0].maxXYZ[0] - vko->homogenousVolumes[0].minXYZ[0]);
+    vko->volumeHeight = (int) (vko->homogenousVolumes[0].maxXYZ[1] - vko->homogenousVolumes[0].minXYZ[1]);
+    vko->volumeDepth = (int) (vko->homogenousVolumes[0].maxXYZ[2] - vko->homogenousVolumes[0].minXYZ[2]);
+}
+
+static inline float fractf(float x) {
+    return x - floorf(x);
+}
+
+static inline float lerp(float a, float b, float t) {
+    return a + (b - a) * t;
+}
+
+static inline float smooth(float x) {
+    return x * x * (3.0f - 2.0f * x);
+}
+
+static inline float smoothstep(float a, float b, float x) {
+    x = (x - a) / (b - a);
+    x = fminf(fmaxf(x, 0.0f), 1.0f);
+    return x * x * (3.0f - 2.0f * x);
+}
+
+float hash3(float x, float y, float z)
+{
+    x = fractf(x * 0.1031f);
+    y = fractf(y * 0.1031f);
+    z = fractf(z * 0.1031f);
+
+    float d = x*(z+31.32f) + y*(y+31.32f) + z*(x+31.32f);
+
+    x += d;
+    y += d;
+    z += d;
+
+    return fractf((x + y) * z);
+}
+
+float noise3(float x, float y, float z)
+{
+    float ix = floorf(x);
+    float iy = floorf(y);
+    float iz = floorf(z);
+
+    float fx = fractf(x);
+    float fy = fractf(y);
+    float fz = fractf(z);
+
+    float ux = smooth(fx);
+    float uy = smooth(fy);
+    float uz = smooth(fz);
+
+    float a = hash3(ix,     iy,     iz);
+    float b = hash3(ix + 1, iy,     iz);
+    float c = hash3(ix,     iy + 1, iz);
+    float d = hash3(ix + 1, iy + 1, iz);
+
+    float e = hash3(ix,     iy,     iz + 1);
+    float f = hash3(ix + 1, iy,     iz + 1);
+    float g = hash3(ix,     iy + 1, iz + 1);
+    float h = hash3(ix + 1, iy + 1, iz + 1);
+
+    float x1 = lerp(a,b,ux);
+    float x2 = lerp(c,d,ux);
+    float x3 = lerp(e,f,ux);
+    float x4 = lerp(g,h,ux);
+
+    float y1 = lerp(x1,x2,uy);
+    float y2 = lerp(x3,x4,uy);
+
+    return lerp(y1,y2,uz);
+}
+
+float fbm(float x, float y, float z)
+{
+    float value = 0.0f;
+    float amp = 0.5f;
+
+    for(int i=0;i<3;i++)
+    {
+        value += amp * noise3(x,y,z);
+
+        x *= 2.02f;
+        y *= 2.02f;
+        z *= 2.02f;
+
+        amp *= 0.5f;
+    }
+
+    return value;
+}
+
+float cloudDensity(vk_context *vko, float x, float y, float z)
+{
+    uint32_t W = vko->volumeWidth;
+    uint32_t H = vko->volumeHeight;
+    uint32_t D = vko->volumeDepth;
+
+    float u = x / (float)(W - 1);
+    float v = y / (float)(H - 1);
+    float w = z / (float)(D - 1);
+
+    float px = u * 2.0f - 1.0f;
+    float py = v * 2.0f - 1.0f;
+    float pz = w * 2.0f - 1.0f;
+
+    float r =
+        (px*px)/(1.0f*1.0f) +
+        (py*py)/(1.0f*1.0f) +
+        ((pz + 0.65)*(pz + 0.65))/(1.0f*1.0f);
+
+    float base = 1.0f - r;
+    
+    float macro = fbm(
+        px*2.5f,
+        py*2.5f,
+        pz*2.5f
+    );
+    
+    base += (macro-0.5f)*2.95f;
+
+    float warp_x = 2 * fbm(px*3+13,py*3,pz*3) - 1;
+    float warp_y = 2 * fbm(px*3,py*3+41,pz*3) - 1;
+    float warp_z = 2 * fbm(px*3,py*3,pz*3+91) - 1;
+
+    warp_x *= 0.35f;
+    warp_y *= 0.35f;
+    warp_z *= 0.35f;
+
+    float erosion =
+    fbm(
+        (px+warp_x)*10,
+        (py+warp_y)*10,
+        (pz+warp_z)*10 
+    );
+
+    float density = base;
+
+    density -= 0.45 * erosion;
+    density = fminf(fmaxf(density,0),1);
+
+    density = powf(density, 1.1f);
+
+    density = smoothstep(
+        0.25f,
+        0.55f,
+        density
+    );
+
+    density = fminf(fmaxf(density,0),1);
+
+    return density;
+}
+
+void initializeHomogeneousVolumeDensity(vk_context *vko)
+{
+    uint32_t W = vko->volumeWidth;
+    uint32_t H = vko->volumeHeight;
+    uint32_t D = vko->volumeDepth;
+
+    vko->density = malloc(sizeof(float) * W * H * D);
+
+    float minX = vko->homogenousVolumes[0].minXYZ[0];
+    float minY = vko->homogenousVolumes[0].minXYZ[1];
+    float minZ = vko->homogenousVolumes[0].minXYZ[2];
+
+    for(uint32_t z = 0; z < D; z++)
+    {
+        for(uint32_t y = 0; y < H; y++)
+        {
+            for(uint32_t x = 0; x < W; x++)
+            {
+                float worldX = x;
+                float worldY = y;
+                float worldZ = z;
+
+                float density = cloudDensity(vko, worldX, worldY, worldZ);
+
+                vko->density[x + y * W + z * W * H] = density;
+            }
+        }
+    }
 }
 
 int main() {
@@ -577,6 +758,7 @@ int main() {
     initializeSpheresCPU(&vko);
     initializeTrianglesCPU(&vko);
     initializeHomogenousVolumesCPU(&vko);
+    initializeHomogeneousVolumeDensity(&vko);
     initRenderer(&vko);
     initializeScreenQuadBuffer(&vko);
     initializeCamera(&vko);

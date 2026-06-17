@@ -114,6 +114,17 @@ typedef struct vk_context {
     int homogenousVolumesCount;
     Camera cam;
 
+    int volumeWidth; // x
+    int volumeHeight; // y
+    int volumeDepth; // z
+
+    float *density; // for testing purposes
+
+    VkImage densityTextureImage;
+    VkImageView densityTextureImageView;
+    VkDeviceMemory densityTextureMemory;
+    VkSampler densityTextureSampler;
+
     // add emissive geometries
     Sphere emissiveSpheres[500];
     int emissiveSpheresCount;
