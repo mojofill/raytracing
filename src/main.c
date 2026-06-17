@@ -4,7 +4,7 @@
 #include "cglm/cglm.h"
 
 #define NUM_SAMPLES 1
-#define MAX_DEPTH 50
+#define MAX_DEPTH 3
 #define ASYMMETRY_PARAMETER 0.80 // Henyey-Greenstein asymmetry parameter. Range: [-1, 1]
 #define MAX_FRAMES_RAN 100
 #define STOP 0
@@ -324,7 +324,7 @@ void initializeSpheresCPU(vk_context *vko) {
         vko->emissiveSpheres[vko->emissiveSpheresCount++] = (Sphere) {
             // .position = {-100, 0, 120},
             // .radius = 40,
-            .position = {150, 0, 50},
+            .position = {150, 0, 100},
             .radius = 60,
             // .position = {5 * (2 * randf() - 1), 5 * (2 * randf() - 1), 0.5},
             // .radius = 0.15 * randf() + 0.10,
@@ -560,8 +560,8 @@ void initializeHomogenousVolumesCPU(vk_context *vko) {
         // .minXYZ = {-5.999, -5.999, 0.001}, // bounding box
         // .maxXYZ = {5.999, 5.999, 5.999}
         
-        .minXYZ = {-35.999, -59.999, -5.001}, // bounding box
-        .maxXYZ = {10.999, 10.999, 25.999}
+        .minXYZ = {-205.999, -180.999, -45.001}, // bounding box
+        .maxXYZ = {0.999, 220.999, 45.999}
     };
 }
 

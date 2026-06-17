@@ -205,8 +205,8 @@ Hit intersectSphere(Ray ray, Sphere sphere) {
 
     float t;
 
-    if (t1 > 1e-6) t = t1;
-    else if (t2 > 1e-6) t = t2;
+    if (t1 > 1e-4) t = t1;
+    else if (t2 > 1e-4) t = t2;
     else return noHit;
 
     vec3 hitPoint = ray.origin + t * ray.dir;
@@ -229,7 +229,7 @@ Hit intersectTriangle(Ray ray, Triangle triangle) {
     Hit noHit = createEmptyHit();
     noHit.didHit = HIT_MISS;
 
-    if (-1e-6 < a && a < 1e-6) return noHit;
+    if (-1e-4 < a && a < 1e-4) return noHit;
 
     float f = 1.0f / a;
     vec3 s = ray.origin - v0;
@@ -248,8 +248,8 @@ Hit intersectTriangle(Ray ray, Triangle triangle) {
 
     float t = f * dot(edge2, q);
 
-    if (t > 1e-6) { // intersection in front of ray
-        vec3 hitPoint = ray.origin + (t - 1e-6) * ray.dir;
+    if (t > 1e-4) { // intersection in front of ray
+        vec3 hitPoint = ray.origin + (t - 1e-4) * ray.dir;
         vec3 normal = normalize(cross(edge1, edge2));
         if (dot(normal, ray.dir) > 0) {
             normal *= -1; // flip normal if facing wrong direction
@@ -424,7 +424,7 @@ vec3 randomCosineWeightedDir(vec3 normal) {
 }
 
 vec3 getNonParallelVector(vec3 v) {
-    if (dot(v, v) < 1e-6) {
+    if (dot(v, v) < 1e-4) {
         return vec3(1.0, 0.0, 0.0);
     }
 
@@ -516,7 +516,7 @@ float fbm(vec3 p) {
     float value = 0.0;
     float amplitude = 0.5;
 
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 3; i++) {
         value += amplitude * noise3(p);
 
         p *= 2.02;
@@ -528,38 +528,39 @@ float fbm(vec3 p) {
 
 float cloudDensity(vec3 p) {
     // Large-scale cloud structure
-    float macro = fbm(p * 0.15);
+    float macro = fbm(p * 0.05);
+
+    if (macro < 0.000001) return 0; // just testing
 
     // Domain warp
-    vec3 warp = vec3(
-        fbm(p * 0.25 + vec3(31,17,11)),
-        fbm(p * 0.25 + vec3(12,51,3)),
-        fbm(p * 0.25 + vec3(7,9,41))
-    );
+    float w = fbm(p * 0.25 + vec3(31,17,11));
+    // vec3 warp = vec3(
+    //     fbm(p * 0.25 + vec3(31,17,11)),
+    //     fbm(p * 0.25 + vec3(12,51,3)),
+    //     fbm(p * 0.25 + vec3(7,9,41))
+    // );
+    vec3 warp = vec3(w);
 
     warp = warp * 2.0 - 1.0;
 
     // Fine detail
     float detail = fbm((p + warp * 3.0) * 1.5);
 
-    float density = macro - 0.5 * detail;
+    float density = macro - 0.8 * detail;
 
-    // density = smoothstep(0.45, 0.8, density);
-    float coverage = 0.55; // higher = thicker clouds
+    density = smoothstep(0.2, 0.4, density);
+    // float coverage = 0.55; // higher = thicker clouds
     // density = smoothstep(coverage, 1.0, density);
-    density = pow(density, 0.6);
+    // density = pow(density, 0.6);
 
     return density;
 }
 
 // for now just assume one single volume
-vec3 getTransmittance(Ray ray, float maxDistance) {
+vec3 getTransmittance(Ray ray, HomogenousVolume volume, float maxDistance) {
     vec3 transmittance = vec3(1.0);
 
-    Hit hit = findClosestVolume(ray);
-    if (hit.didHit == HIT_MISS) return transmittance;
-
-    HomogenousVolume volume = hit.volume;
+    Hit hit = intersectHomogenousVolume(ray, volume);
 
     float entryT = max(hit.tNear, 0);
     float exitT = min(hit.tFar, maxDistance);
@@ -607,7 +608,7 @@ TraceData shadeSurface(Ray ray, vec3 incomingLight, vec3 rayColor, Hit hitSurfac
             Sphere sphere = emissiveSpheres[i];
             vec3 lightPoint = randomPointOnHemisphereToPoint(sphere, point);
             vec3 shadowDir = normalize(lightPoint - hitSurface.position);
-            Ray shadowRay = Ray(hitSurface.position + 1e-6 * normal, shadowDir);
+            Ray shadowRay = Ray(hitSurface.position + 1e-4 * normal, shadowDir);
             if (isInShadow(shadowRay, length(lightPoint - hitSurface.position))) continue; // this light does not contribute anything
 
             // light normal on sphere
@@ -622,7 +623,7 @@ TraceData shadeSurface(Ray ray, vec3 incomingLight, vec3 rayColor, Hit hitSurfac
 
             float area = 2.0 * PI * sphere.radius * sphere.radius; // 4pir^2 / 2 = 2pir^2 cuz only sampling hemisphere
 
-            float p_light = dist2 / (area * cos_light + 1e-6);
+            float p_light = dist2 / (area * cos_light + 1e-4);
             float p_bsdf = cos_surface / PI;
 
             float w = (p_light * p_light) /
@@ -633,14 +634,16 @@ TraceData shadeSurface(Ray ray, vec3 incomingLight, vec3 rayColor, Hit hitSurfac
 
             // finally, get the transmittance along shadow ray if it exists and multiply to the contribution
 
-            vec3 transmittance = getTransmittance(shadowRay, length(lightPoint - point));
+            vec3 transmittance = vec3(1);
+            Hit findVolume = findClosestVolume(shadowRay);
+            if (findVolume.didHit == HIT_SUCCESS) {
+                transmittance = getTransmittance(shadowRay, findVolume.volume, length(lightPoint - point));
+            }
 
-            // transmittance = vec3(1);
-
-            incomingLight += rayColor * transmittance * Le * f * cos_surface / (p_light + 1e-6) * w;
+            incomingLight += rayColor * transmittance * Le * f * cos_surface / (p_light + 1e-4) * w;
         }
 
-        ray.origin = hitSurface.position + 1e-6f * normal;
+        ray.origin = hitSurface.position + 1e-4f * normal;
         vec3 diffuseDir = randomCosineWeightedDir(normal); // random hemisphere cosine weighted direction
         vec3 specularDir = reflect(ray.dir, normal);
         ray.dir = mix(diffuseDir, specularDir, mat.reflectivity);
@@ -658,7 +661,7 @@ Ray scatter(Ray ray, vec3 scatterPoint) {
     // Read here for more detail: https://zydak.github.io/Clouds/index.html
     float e3 = randf();
     float cos_theta;
-    if (abs(g) < 1e-6) {
+    if (abs(g) < 1e-4) {
         cos_theta = 2 * e3 - 1;
     }
     else {
@@ -680,7 +683,7 @@ Ray scatter(Ray ray, vec3 scatterPoint) {
     vec3 w = sin_theta * cos(phi) * t + sin_theta * sin(phi) * b + cos_theta * v;
     w = normalize(w); // just in case lmao
 
-    ray.origin = scatterPoint + 1e-6 * w;
+    ray.origin = scatterPoint + 1e-4 * w;
     ray.dir = w; // this is new direction
 
     return ray;
@@ -699,7 +702,7 @@ vec3 traceRay(Ray ray) {
 
     TraceData data = TraceData(ray, incomingLight, rayColor);
 
-    for (int i = 0; i < MAX_DEPTH; i++) {
+    for (int depth = 0; depth < MAX_DEPTH; depth++) {
         Hit hitSurface = findClosestSurface(ray); // surface hit
         Hit hitVolume = findClosestVolume(ray);
 
@@ -755,7 +758,7 @@ vec3 traceRay(Ray ray) {
                     break;
                 }
                 else { // ray left medium
-                    ray.origin += (hitVolume.tFar + 1e-6) * ray.dir;
+                    ray.origin += (hitVolume.tFar + 1e-4) * ray.dir;
                     // no beer's law now, at least thats just according to chatgpt
                     break;
                 }
@@ -784,8 +787,8 @@ vec3 traceRay(Ray ray) {
                     // scatter
                     vec3 scatterPoint = ray.origin + travelledT * ray.dir; // this should be renamed in the struct to hitPoint but whatever
 
-                    vec3 localAlbedo = localScatteringCoefficient / (localExtinctionCoefficient + vec3(1e-6));
-                    rayColor *= localAlbedo / (scatterProbability + 1e-6);
+                    vec3 localAlbedo = localScatteringCoefficient / (localExtinctionCoefficient + vec3(1e-4));
+                    rayColor *= localAlbedo / (scatterProbability + 1e-4);
 
                     // direct light sampling for homogeneous volumes
                     for (int i = 0; i < emissiveSpheresCount; i++) {
@@ -806,7 +809,7 @@ vec3 traceRay(Ray ray) {
                         // NOTE: this does NOT stack volumes. treats everything outside of current volume as vacuum, ie doesnt track any other homogenous volumes in the scene
                         HomogenousVolume volume = hitVolume.volume;
 
-                        vec3 transmittance = getTransmittance(shadowRay, dist);
+                        vec3 transmittance = getTransmittance(shadowRay, volume, dist);
                         
                         float phase = HenyeyGreensteinPhaseFunction(wi, wo);
                         float area = 2 * PI * sphere.radius * sphere.radius; // hemisphere area
@@ -834,6 +837,17 @@ vec3 traceRay(Ray ray) {
         }
 
         if (absorbRay) break;
+
+        if (depth >= 3) { // dont do russian roulette for the first few bounces
+            float p = max(max(rayColor.r, rayColor.g), rayColor.b);
+            p = clamp(p, 0.05, 0.95);
+
+            if (randf() > p) {
+                break; // early termination
+            }
+
+            rayColor /= p; // balance out early ray terminations
+        }
     }
 
     // this is a quick hack for disabling fireflies, at the expense of making things less bright in general

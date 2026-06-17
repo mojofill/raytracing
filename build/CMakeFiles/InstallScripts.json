@@ -1,7 +1,7 @@
 {
 	"InstallScripts" : 
 	[
-		"C:/Users/henry/Desktop/vulkan-projects/raytracing/build/cmake_install.cmake"
+		"/Users/henryzhang/Documents/vulkan-projects/raytracing/build/cmake_install.cmake"
 	],
 	"Parallel" : false
 }
